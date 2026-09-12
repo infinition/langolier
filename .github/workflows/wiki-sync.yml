@@ -21,11 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # GitHub only creates the wiki repository once a first page exists.
+      # Until someone saves one from the web UI, skip instead of failing.
       - name: Clone the wiki
+        id: clone
         run: |
-          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+          if git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki 2>/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Wiki not initialised. Create one page at https://github.com/${{ github.repository }}/wiki, then re-run."
+          fi
 
       - name: Copy pages
+        if: steps.clone.outputs.ready == 'true'
         run: |
           set -e
           find wiki -maxdepth 1 -name '*.md' -delete
@@ -39,6 +48,7 @@ jobs:
           ls -la wiki
 
       - name: Push
+        if: steps.clone.outputs.ready == 'true'
         working-directory: wiki
         run: |
           git config user.name "github-actions[bot]"
