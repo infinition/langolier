@@ -1,0 +1,19 @@
+services:
+  chatbot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: langolier-chatbot:latest
+    container_name: langolier-chatbot
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      # Drop a new .langolier here to update the bot. Picked up in under 30 s,
+      # conversations preserved.
+      - ./data:/data
+      # Server state: working copy and conversations.
+      - ./state:/state
+    environment:
+      - LANGOLIER_BUNDLE_DIR=/data
+    mem_limit: 2g

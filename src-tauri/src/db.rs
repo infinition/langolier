@@ -1,0 +1,214 @@
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+pub type Res<T> = Result<T, String>;
+pub fn err(e: impl std::fmt::Display) -> String {
+    e.to_string()
+}
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(default)]
+pub struct Settings {
+    pub provider: String,
+    pub endpoint: String,
+    pub model: String,
+    pub embedding_endpoint: String,
+    pub embedding_model: String,
+    pub whisper_model: String,
+    pub top_k: usize,
+    pub temperature: f32,
+    pub context_size: usize,
+    /// Key for the remote chat provider.
+    pub api_key: String,
+    /// Maximum answer length, in tokens.
+    pub max_tokens: usize,
+    /// Minimum cosine for a passage to count in dense search.
+    pub min_dense_score: f32,
+    /// Minimum BM25 score; 0 disables it.
+    pub min_lexical_score: f32,
+    /// Second pass by a judge model, with an abstention threshold.
+    pub rerank_enabled: bool,
+    /// Judge model; empty means the chat model.
+    pub rerank_model: String,
+    pub rerank_candidates: usize,
+    pub rerank_threshold: f32,
+    pub strict_grounding: bool,
+    pub abstain_text: String,
+    /// After-the-fact check that the answer is supported by the passages.
+    pub verify_answer: bool,
+    /// Global palette shortcut, in Tauri accelerator syntax.
+    pub shortcut: String,
+    /// Watch scan interval, in seconds.
+    pub watch_interval: u64,
+    /// Active assistant profile; empty means bare Langolier.
+    pub active_assistant: String,
+    pub ingestion_paused: bool,
+}
+pub const SHORTCUT: &str = "CommandOrControl+Shift+Space";
+pub const ABSTAIN: &str = "Je n’ai pas cette information.";
+/// Former abstention text, replaced on start unless customised.
+pub const ABSTAIN_LEGACY: &str = "I do not find that information in the indexed sources.";
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            provider: "ollama".into(),
+            endpoint: "http://127.0.0.1:11434".into(),
+            model: "qwen3:8b".into(),
+            embedding_endpoint: "http://127.0.0.1:11434".into(),
+            embedding_model: "embeddinggemma".into(),
+            whisper_model: String::new(),
+            top_k: 6,
+            temperature: 0.2,
+            context_size: 8192,
+            api_key: String::new(),
+            max_tokens: 2048,
+            min_dense_score: 0.35,
+            min_lexical_score: 0.0,
+            rerank_enabled: true,
+            rerank_model: String::new(),
+            rerank_candidates: 20,
+            rerank_threshold: 0.35,
+            strict_grounding: true,
+            abstain_text: ABSTAIN.into(),
+            verify_answer: false,
+            shortcut: SHORTCUT.into(),
+            watch_interval: 30,
+            active_assistant: String::new(),
+            ingestion_paused: false,
+        }
+    }
+}
+#[derive(Clone)]
+pub struct Db {
+    pub root: PathBuf,
+}
+impl Db {
+    pub fn new(root: &Path) -> Res<Self> {
+        std::fs::create_dir_all(root.join("media")).map_err(err)?;
+        let db = Self { root: root.into() };
+        let c = db.conn()?;
+        c.execute_batch("PRAGMA journal_mode=WAL;
+ CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY,name TEXT NOT NULL,source TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',stage TEXT NOT NULL DEFAULT 'Queued',error TEXT,hash TEXT,language TEXT,bytes INTEGER DEFAULT 0,created INTEGER NOT NULL,updated INTEGER NOT NULL);
+ CREATE UNIQUE INDEX IF NOT EXISTS dedup_hash ON documents(hash) WHERE hash IS NOT NULL;
+ CREATE TABLE IF NOT EXISTS chunks(id INTEGER PRIMARY KEY,doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,ordinal INTEGER NOT NULL,text TEXT NOT NULL,locator TEXT NOT NULL,embedding BLOB,embedding_model TEXT,UNIQUE(doc_id,ordinal));
+ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text,content='chunks',content_rowid='id',tokenize='unicode61 remove_diacritics 2');
+ CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN INSERT INTO chunks_fts(rowid,text) VALUES(new.id,new.text); END;
+ CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN INSERT INTO chunks_fts(chunks_fts,rowid,text) VALUES('delete',old.id,old.text); END;
+ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE OF text ON chunks BEGIN INSERT INTO chunks_fts(chunks_fts,rowid,text) VALUES('delete',old.id,old.text); INSERT INTO chunks_fts(rowid,text) VALUES(new.id,new.text); END;
+ CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,title TEXT NOT NULL,created INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,role TEXT NOT NULL,content TEXT NOT NULL,sources TEXT NOT NULL DEFAULT '[]',created INTEGER NOT NULL,feedback INTEGER);
+ CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,model TEXT NOT NULL,status TEXT NOT NULL,latency_ms INTEGER NOT NULL,tokens INTEGER DEFAULT 0,tps REAL,details TEXT NOT NULL,created INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS api_keys(id TEXT PRIMARY KEY,label TEXT NOT NULL UNIQUE,provider TEXT NOT NULL DEFAULT '',key TEXT NOT NULL,created INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS evaluations(id TEXT PRIMARY KEY,question TEXT NOT NULL,expected_document TEXT NOT NULL);
+ CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id);
+ CREATE INDEX IF NOT EXISTS docs_state ON documents(status,created);
+ UPDATE documents SET status='queued',stage='Resumed after interruption' WHERE status='processing';").map_err(err)?;
+        c.execute_batch(crate::watch::schema()).map_err(err)?;
+        crate::watch::migrate(&c)?;
+        c.execute_batch(crate::assistant::schema()).map_err(err)?;
+        crate::assistant::migrate(&c)?;
+        c.execute_batch(crate::telegram::schema()).map_err(err)?;
+        drop(c);
+        let mut s = db.settings()?;
+        if s.abstain_text.trim() == ABSTAIN_LEGACY {
+            s.abstain_text = ABSTAIN.into();
+            db.set_settings(&s)?;
+        }
+        Ok(db)
+    }
+    pub fn conn(&self) -> Res<Connection> {
+        let c = Connection::open(self.root.join("langolier.sqlite3")).map_err(err)?;
+        c.busy_timeout(std::time::Duration::from_secs(15))
+            .map_err(err)?;
+        c.execute_batch("PRAGMA foreign_keys=ON;").map_err(err)?;
+        Ok(c)
+    }
+    pub fn settings(&self) -> Res<Settings> {
+        let c = self.conn()?;
+        let raw: Result<String, _> =
+            c.query_row("SELECT value FROM settings WHERE id=1", [], |r| r.get(0));
+        match raw {
+            Ok(v) => serde_json::from_str(&v).map_err(err),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Settings::default()),
+            Err(e) => Err(err(e)),
+        }
+    }
+    pub fn set_settings(&self, s: &Settings) -> Res<()> {
+        self.conn()?.execute("INSERT INTO settings VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET value=excluded.value",[serde_json::to_string(s).map_err(err)?]).map_err(err)?;
+        Ok(())
+    }
+    pub fn stage(&self, id: &str, stage: &str) -> Res<()> {
+        self.conn()?
+            .execute(
+                "UPDATE documents SET stage=?2,updated=?3 WHERE id=?1",
+                params![id, stage, now()],
+            )
+            .map_err(err)?;
+        Ok(())
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn log(
+        &self,
+        kind: &str,
+        model: &str,
+        status: &str,
+        ms: u64,
+        tokens: u64,
+        tps: Option<f64>,
+        details: &serde_json::Value,
+    ) -> Res<()> {
+        self.conn()?
+            .execute(
+                "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    kind,
+                    model,
+                    status,
+                    ms,
+                    tokens,
+                    tps,
+                    details.to_string(),
+                    now()
+                ],
+            )
+            .map_err(err)?;
+        Ok(())
+    }
+}
+pub fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+pub fn json_rows(db: &Db, sql: &str) -> Res<Vec<serde_json::Value>> {
+    let c = db.conn()?;
+    let mut q = c.prepare(sql).map_err(err)?;
+    let names = q
+        .column_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+    let r = q
+        .query_map([], |r| {
+            let mut m = serde_json::Map::new();
+            for (i, n) in names.iter().enumerate() {
+                let v = match r.get_ref(i)? {
+                    rusqlite::types::ValueRef::Null => serde_json::Value::Null,
+                    rusqlite::types::ValueRef::Integer(v) => v.into(),
+                    rusqlite::types::ValueRef::Real(v) => serde_json::json!(v),
+                    rusqlite::types::ValueRef::Text(v) => {
+                        String::from_utf8_lossy(v).to_string().into()
+                    }
+                    _ => serde_json::Value::Null,
+                };
+                m.insert(n.clone(), v);
+            }
+            Ok(serde_json::Value::Object(m))
+        })
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    Ok(r)
+}

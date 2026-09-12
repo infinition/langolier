@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Assistant</title>
+<style>
+  /* Themes: each name sets its variables, the rest is shared. */
+  :root, [data-theme="nuit"] {
+    --bg: #111310; --panel: #191c17; --line: #2a2e26; --text: #e9ebe3; --muted: #92978a;
+    --accent: #d7f98a; --accent-ink: #1a1f0e; --user: #23301a; --assistant: #191c17;
+  }
+  [data-theme="clair"] {
+    --bg: #f6f5f0; --panel: #ffffff; --line: #e3e1d8; --text: #1e211b; --muted: #6f756a;
+    --accent: #2f6b2a; --accent-ink: #ffffff; --user: #e8f1dc; --assistant: #ffffff;
+  }
+  [data-theme="sauge"] {
+    --bg: #eef2ea; --panel: #f9fbf6; --line: #d3dccb; --text: #22301f; --muted: #6a7a63;
+    --accent: #5f8f5a; --accent-ink: #ffffff; --user: #d9e8d0; --assistant: #f9fbf6;
+  }
+  [data-theme="sable"] {
+    --bg: #f4ecdd; --panel: #fbf6ea; --line: #e0d3b8; --text: #3a2f1e; --muted: #86755a;
+    --accent: #b8722d; --accent-ink: #ffffff; --user: #efdfc0; --assistant: #fbf6ea;
+  }
+  [data-theme="encre"] {
+    --bg: #0e1220; --panel: #161b2e; --line: #262d47; --text: #e6e9f5; --muted: #8b93b3;
+    --accent: #7aa2ff; --accent-ink: #0b1020; --user: #1e2747; --assistant: #161b2e;
+  }
+  [data-theme="corail"] {
+    --bg: #1b1214; --panel: #24181b; --line: #3a2529; --text: #f4e9ea; --muted: #a88b90;
+    --accent: #ff7a6e; --accent-ink: #2a0f0c; --user: #3a2226; --assistant: #24181b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 14px 20px;
+    border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 12px; object-fit: cover; flex-shrink: 0;
+    background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+    font-weight: 700; font-size: 18px; overflow: hidden;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  header .new { margin-left: auto; }
+  main { flex: 1; overflow: auto; padding: 22px 0 10px; }
+  .thread { max-width: 780px; margin: 0 auto; padding: 0 20px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { display: flex; gap: 10px; align-items: flex-end; animation: in .22s ease-out; }
+  .msg.user { flex-direction: row-reverse; }
+  .msg .avatar { width: 28px; height: 28px; border-radius: 9px; font-size: 13px; }
+  .bubble {
+    max-width: 78%; padding: 11px 15px; border-radius: 16px; border: 1px solid var(--line);
+    background: var(--assistant); word-wrap: break-word; white-space: pre-wrap;
+  }
+  .msg.user .bubble { background: var(--user); border-bottom-right-radius: 5px; }
+  .msg.assistant .bubble { border-bottom-left-radius: 5px; }
+  .bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: rgba(127,127,127,.15); padding: 1px 5px; border-radius: 4px; }
+  .bubble pre { white-space: pre-wrap; margin: 6px 0; }
+  .sources { font-size: 11.5px; color: var(--muted); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .phase { color: var(--muted); font-size: 13px; animation: pulse 1.4s infinite; }
+  .caret { display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink .9s steps(2) infinite; }
+  footer { padding: 12px 20px 18px; background: var(--panel); border-top: 1px solid var(--line); }
+  form { max-width: 780px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; min-height: 46px; max-height: 160px; padding: 12px 14px; border-radius: 14px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  button {
+    font: inherit; border: 0; border-radius: 12px; padding: 12px 18px; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink); font-weight: 600;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 12px; font-weight: 500; font-size: 13px; }
+  .error { color: #d9534f; }
+  .hint { text-align: center; font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+  .banner { display: none; margin: 0; padding: 9px 20px; font-size: 12.5px; line-height: 1.5; background: rgba(226,180,145,.14); color: var(--text); border-bottom: 1px solid var(--line); }
+  .banner.show { display: block; }
+  .banner code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes pulse { 50% { opacity: .5; } }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="avatar" id="avatar">?</div>
+  <div>
+    <h1 id="name">Assistant</h1>
+    <p id="welcome"></p>
+  </div>
+  <button class="ghost new" id="new" type="button">Nouvelle conversation</button>
+</header>
+<p class="banner" id="banner"></p>
+<main><div class="thread" id="thread"></div></main>
+<footer>
+  <form id="form">
+    <textarea id="q" rows="1" placeholder="Posez votre question…" autofocus></textarea>
+    <button id="send" type="submit">Envoyer</button>
+  </form>
+  <p class="hint">Answers grounded only in this assistant's knowledge.</p>
+</footer>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const thread = $("thread"), q = $("q"), send = $("send"), form = $("form");
+  let config = { name: "Assistant" };
+  let conversation = localStorage.getItem("conversation") || "";
+  let busy = false;
+
+  const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Mise en forme minimale : gras, code, blocs de code. Pas de HTML entrant.
+  const render = (s) => escapeHtml(s)
+    .replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`)
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  const initial = (name) => (name.trim()[0] || "?").toUpperCase();
+
+  function avatarNode(small) {
+    const el = document.createElement("div");
+    el.className = "avatar";
+    if (config.avatar) el.innerHTML = `<img alt="" src="${config.avatar}">`;
+    else el.textContent = initial(config.name);
+    return el;
+  }
+  function addMessage(role, content, sources) {
+    const msg = document.createElement("div");
+    msg.className = `msg ${role}`;
+    if (role === "assistant") msg.appendChild(avatarNode());
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.innerHTML = render(content || "");
+    if (config.show_sources !== false && sources && sources.length) b.appendChild(sourcesNode(sources));
+    msg.appendChild(b);
+    thread.appendChild(msg);
+    scroll();
+    return b;
+  }
+  function sourcesNode(sources) {
+    const el = document.createElement("div");
+    el.className = "sources";
+    el.textContent = sources.slice(0, 4).map((s, i) => `[${i + 1}] ${s.name}`).join("  ·  ");
+    return el;
+  }
+  const scroll = () => requestAnimationFrame(() => (document.querySelector("main").scrollTop = 1e9));
+
+  async function loadConfig() {
+    const r = await fetch("/api/config"); config = await r.json();
+    document.documentElement.dataset.theme = config.theme || "nuit";
+    document.title = config.name;
+    $("name").textContent = config.name;
+    $("welcome").textContent = config.welcome || "";
+    document.querySelector(".hint").textContent = config.show_sources === false
+      ? "Answers grounded only in this assistant's knowledge."
+      : "Answers grounded only in this assistant's knowledge. Cited sources appear under each answer.";
+    const av = $("avatar"); av.innerHTML = ""; av.appendChild(avatarNode().firstChild || document.createTextNode(initial(config.name)));
+    if (config.avatar) { av.innerHTML = `<img alt="" src="${config.avatar}">`; }
+  }
+  async function loadHealth() {
+    try {
+      const r = await fetch("/api/health"); const h = await r.json();
+      const b = $("banner");
+      if (h.problems && h.problems.length) {
+        b.innerHTML = (h.degraded ? "⚠︎ " : "✖ ") + h.problems.map(escapeHtml).join("<br>").replace(/`([^`]+)`/g, "<code>$1</code>");
+        b.classList.add("show");
+      } else b.classList.remove("show");
+    } catch (e) { /* la page reste utilisable */ }
+  }
+  async function loadHistory() {
+    thread.innerHTML = "";
+    if (conversation) {
+      const r = await fetch(`/api/messages?id=${encodeURIComponent(conversation)}`);
+      if (r.ok) {
+        const list = await r.json();
+        if (!list.length) conversation = "";
+        for (const m of list) addMessage(m.role, m.content, m.role === "assistant" ? m.sources : null);
+      } else conversation = "";
+    }
+    if (!thread.children.length && config.welcome) addMessage("assistant", config.welcome);
+  }
+  async function ask(text) {
+    busy = true; send.disabled = true; q.value = ""; q.style.height = "";
+    addMessage("user", text);
+    const bubble = addMessage("assistant", "");
+    const phase = document.createElement("span"); phase.className = "phase"; phase.textContent = "Connexion…";
+    bubble.appendChild(phase);
+    let answer = "";
+    try {
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: conversation, question: text }) });
+      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+      const caret = document.createElement("span"); caret.className = "caret";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          const ev = /^event: (.*)$/m.exec(frame)?.[1]; const data = /^data: (.*)$/m.exec(frame)?.[1];
+          if (!ev || data === undefined) continue;
+          const payload = JSON.parse(data);
+          if (ev === "conversation") { conversation = payload.id; localStorage.setItem("conversation", conversation); }
+          else if (ev === "phase") phase.textContent = payload;
+          else if (ev === "token") { answer += payload; bubble.innerHTML = render(answer); bubble.appendChild(caret); scroll(); }
+          else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); }
+          else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(payload.error || "Erreur")}</span>`; }
+        }
+      }
+      if (!answer && !bubble.textContent.trim()) bubble.textContent = "No answer received.";
+    } catch (e) {
+      bubble.innerHTML = `<span class="error">${escapeHtml(String(e))}</span>`;
+    } finally {
+      busy = false; send.disabled = false; q.focus(); scroll();
+    }
+  }
+  form.addEventListener("submit", (e) => { e.preventDefault(); const t = q.value.trim(); if (t && !busy) ask(t); });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+  q.addEventListener("input", () => { q.style.height = ""; q.style.height = Math.min(160, q.scrollHeight) + "px"; });
+  $("new").addEventListener("click", () => { conversation = ""; localStorage.removeItem("conversation"); loadHistory(); q.focus(); });
+  loadConfig().then(loadHistory).then(loadHealth).catch((e) => addMessage("assistant", `Impossible de charger la configuration : ${e}`));
+  setInterval(loadHealth, 30000);
+})();
+</script>
+</body>
+</html>

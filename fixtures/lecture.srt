@@ -1,0 +1,7 @@
+1
+00:00:01,000 --> 00:00:09,000
+La régularisation réduit le surapprentissage en limitant la complexité effective du modèle.
+
+2
+00:00:09,000 --> 00:00:18,000
+Le jeu de test doit rester séparé du réglage des hyperparamètres.

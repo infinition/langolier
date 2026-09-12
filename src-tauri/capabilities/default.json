@@ -1,0 +1,18 @@
+{
+  "identifier": "default",
+  "description": "Local desktop window and file selection",
+  "windows": [
+    "main",
+    "palette"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "dialog:allow-ask"
+  ]
+}

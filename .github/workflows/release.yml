@@ -1,0 +1,114 @@
+# Builds Langolier for macOS (Apple Silicon), Windows and Linux, then publishes
+# the app plus one set of chatbot launchers per platform.
+# Triggered by a v* tag, or by hand.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            label: macos-arm64
+            bundles: app,dmg
+            binary: src-tauri/target/release/langolier
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            bundles: deb,appimage
+            binary: src-tauri/target/release/langolier
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x64
+            bundles: nsis
+            binary: src-tauri/target/release/langolier.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      # llama-cpp-sys-2 needs cmake, present on all three images.
+      - run: cmake --version
+      - run: npm ci
+
+      - name: Build the app
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          # No certificate: ad hoc signing on macOS, unsigned elsewhere.
+          CI: true
+
+      - name: Locate the binary
+        id: bin
+        shell: bash
+        run: |
+          set -e
+          candidate="src-tauri/target/${{ matrix.target }}/release/langolier${{ runner.os == 'Windows' && '.exe' || '' }}"
+          [ -f "$candidate" ] || candidate="${{ matrix.binary }}"
+          echo "path=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: Build the chatbot launchers
+        shell: bash
+        run: node scripts/make-runners.mjs "${{ steps.bin.outputs.path }}" "dist-runners/chatbot-runners-${{ matrix.label }}" "Chatbot"
+
+      - name: Archive
+        shell: bash
+        run: |
+          set -e
+          mkdir -p out
+          cd dist-runners
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "../out/chatbot-runners-${{ matrix.label }}.zip" "chatbot-runners-${{ matrix.label }}"
+          else
+            zip -qry "../out/chatbot-runners-${{ matrix.label }}.zip" "chatbot-runners-${{ matrix.label }}"
+          fi
+          cd ..
+          # App bundles produced by Tauri.
+          find src-tauri/target -path '*/release/bundle/*' -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} out/ \; || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: langolier-${{ matrix.label }}
+          path: out/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

@@ -1,0 +1,35 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+.DS_Store
+*.log
+
+# Local tooling and scratch space
+.claude/
+.vscode/
+.idea/
+work/
+__pycache__/
+*.pyc
+playwright-report/
+test-results/
+
+# Secrets and machine-local configuration
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+secrets.json
+
+# Exported chatbots: they embed API keys and model weights
+deploy/
+*.langolier
+*.gguf
+*.bin
+models/
+
+# Mobile icon sets, regenerate with: npx tauri icon app-icon.png
+src-tauri/icons/ios/
+src-tauri/icons/android/
