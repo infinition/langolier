@@ -1,59 +1,25 @@
-# Mirrors docs/ into the GitHub wiki on every push to main.
-# The wiki must exist: create its first page once from the web UI.
-name: wiki-sync
+name: Wiki Sync
 
 on:
   push:
-    branches: [main]
-    paths: ["docs/**", ".github/workflows/wiki-sync.yml"]
+    branches: [ main ]
+    paths:
+      - 'wiki/**'
+      - 'docs/**'
+      - '*.md'
+      - '.github/acidwiki.json'
+      - '.github/workflows/wiki-sync.yml'
+
   workflow_dispatch:
+
+  schedule:
+    - cron: '0 4 * * *'
 
 permissions:
   contents: write
-
-concurrency:
-  group: wiki-sync
-  cancel-in-progress: true
+  pages: write
+  id-token: write
 
 jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # GitHub only creates the wiki repository once a first page exists.
-      # Until someone saves one from the web UI, skip instead of failing.
-      - name: Clone the wiki
-        id: clone
-        run: |
-          if git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki 2>/dev/null; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Wiki not initialised. Create one page at https://github.com/${{ github.repository }}/wiki, then re-run."
-          fi
-
-      - name: Copy pages
-        if: steps.clone.outputs.ready == 'true'
-        run: |
-          set -e
-          find wiki -maxdepth 1 -name '*.md' -delete
-          cp docs/*.png wiki/ 2>/dev/null || true
-          for f in docs/*.md; do
-            name=$(basename "$f" .md)
-            # GUIDE.md becomes the wiki landing page.
-            [ "$name" = "GUIDE" ] && name=Home
-            cp "$f" "wiki/$name.md"
-          done
-          ls -la wiki
-
-      - name: Push
-        if: steps.clone.outputs.ready == 'true'
-        working-directory: wiki
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --staged --quiet && echo "wiki already up to date" && exit 0
-          git commit -m "docs: sync from ${GITHUB_SHA::7}"
-          git push
+  deploy-wiki:
+    uses: infinition/AcidWiki/.github/workflows/reusable-wiki-sync.yml@main
