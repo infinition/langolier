@@ -1,15 +1,13 @@
-# Builds Langolier for macOS (Apple Silicon), Windows and Linux, then publishes
-# the app plus one set of chatbot launchers per platform.
-# Triggered by a v* tag, or by hand.
-name: release
+name: Desktop builds and releases
 
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -17,99 +15,95 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            target: aarch64-apple-darwin
-            label: macos-arm64
-            bundles: app,dmg
-            binary: src-tauri/target/release/langolier
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            label: linux-x64
-            bundles: deb,appimage
-            binary: src-tauri/target/release/langolier
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: windows-x64
-            bundles: nsis
+            artifact: windows-x64
+            args: --bundles nsis
             binary: src-tauri/target/release/langolier.exe
+          - os: ubuntu-24.04
+            artifact: linux-x64
+            args: --bundles deb,rpm,appimage
+            binary: src-tauri/target/release/langolier
+          - os: macos-15
+            artifact: macos-universal
+            args: --target universal-apple-darwin --bundles app,dmg
+            binary: src-tauri/target/universal-apple-darwin/release/langolier
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
-
+          components: rustfmt, clippy
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Linux system dependencies
+      - name: macOS architectures
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
+      - name: Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
-
-      # llama-cpp-sys-2 needs cmake, present on all three images.
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf rpm libfuse2t64
+      # llama-cpp-sys-2 builds llama.cpp with cmake, present on all three images.
       - run: cmake --version
       - run: npm ci
-
-      - name: Build the app
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-        env:
-          # No certificate: ad hoc signing on macOS, unsigned elsewhere.
-          CI: true
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
-
-      - name: Locate the binary
-        id: bin
+      - name: Formatting and lints
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Dataset tooling tests
+        run: python scripts/test_dataset.py
+      # Tauri embeds the frontend; a bare cargo build can retain the dev URL.
+      - name: Build production application and packages
+        run: npm run tauri build -- ${{ matrix.args }}
+      - name: Chatbot launchers
+        shell: bash
+        run: node scripts/make-runners.mjs "${{ matrix.binary }}" "release-assets/chatbot-runners-${{ matrix.artifact }}" "Chatbot"
+      - name: Prepare assets
         shell: bash
         run: |
           set -e
-          candidate="src-tauri/target/${{ matrix.target }}/release/langolier${{ runner.os == 'Windows' && '.exe' || '' }}"
-          [ -f "$candidate" ] || candidate="${{ matrix.binary }}"
-          echo "path=$candidate" >> "$GITHUB_OUTPUT"
-
-      - name: Build the chatbot launchers
-        shell: bash
-        run: node scripts/make-runners.mjs "${{ steps.bin.outputs.path }}" "dist-runners/chatbot-runners-${{ matrix.label }}" "Chatbot"
-
-      - name: Archive
-        shell: bash
-        run: |
-          set -e
-          mkdir -p out
-          cd dist-runners
+          cd release-assets
           if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "../out/chatbot-runners-${{ matrix.label }}.zip" "chatbot-runners-${{ matrix.label }}"
+            7z a "chatbot-runners-${{ matrix.artifact }}.zip" "chatbot-runners-${{ matrix.artifact }}"
           else
-            zip -qry "../out/chatbot-runners-${{ matrix.label }}.zip" "chatbot-runners-${{ matrix.label }}"
+            zip -qry "chatbot-runners-${{ matrix.artifact }}.zip" "chatbot-runners-${{ matrix.artifact }}"
           fi
+          rm -rf "chatbot-runners-${{ matrix.artifact }}"
           cd ..
-          # App bundles produced by Tauri.
-          find src-tauri/target -path '*/release/bundle/*' -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} out/ \; || true
-          ls -la out
-
+          find src-tauri/target -path '*/release/bundle/*' -type f \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
+            -exec cp {} release-assets/ \;
+          ls -la release-assets
       - uses: actions/upload-artifact@v4
         with:
-          name: langolier-${{ matrix.label }}
-          path: out/*
+          name: langolier-${{ matrix.artifact }}
+          path: release-assets/*
+          if-no-files-found: error
 
   publish:
     needs: build
-    runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          pattern: langolier-*
+          path: release-assets
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
-          generate_release_notes: true
+          body_path: docs/releases/v0.1.0.md
+          files: release-assets/*
+          fail_on_unmatched_files: true

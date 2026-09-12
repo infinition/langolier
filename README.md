@@ -22,31 +22,43 @@ Langolier indexes what you already own and answers from it. Retrieval runs on SQ
 
 The desktop app is Rust plus Tauri 2 with a React front end. The same binary also runs headless as a chatbot server, which is how an exported assistant gets deployed.
 
-![Langolier answering with citations](docs/screenshots/conversation.png)
+<p align="center">
+  <img src="docs/screenshots/conversation.png" alt="Langolier answering with citations" width="100%" />
+  <br>
+  <sub><strong>Conversation:</strong> Every factual sentence carries a numbered citation, and the chips under the answer open the exact passage that backed it. The footer shows which memory mode and which model produced it.</sub>
+</p>
 
 ### A look around
 
-**Conversation.** Every factual sentence carries a numbered citation, and the chips under the answer open the exact passage that backed it. The footer shows which memory mode and which model produced it.
+<p align="center">
+  <img src="docs/screenshots/sources.png" alt="Source library" width="100%" />
+  <br>
+  <sub><strong>Sources:</strong> One row per ingested file, with its language, its passage count and how many of those passages already carry a vector. List, tree and full-text search share the same view, and a folder in the tree can be reindexed or removed in one click.</sub>
+</p>
 
-![Sources](docs/screenshots/sources.png)
+<p align="center">
+  <img src="docs/screenshots/watches.png" alt="Watched folders" width="100%" />
+  <br>
+  <sub><strong>Watches:</strong> Folders that feed themselves into the memory. Sync leaves files in place, hoover moves them in. Each card shows what is ready, queued or failed, when it was last scanned, and can be paused without losing anything.</sub>
+</p>
 
-**Sources.** One row per ingested file, with its language, its passage count and how many of those passages already carry a vector. List, tree and full-text search share the same view, and a folder in the tree can be reindexed or removed in one click.
+<p align="center">
+  <img src="docs/screenshots/assistant-editor.png" alt="Assistant editor" width="100%" />
+  <br>
+  <sub><strong>Assistants:</strong> A profile is a mission, a knowledge scope, an engine and a set of caps. The token caps bound an API bill, and hiding source names keeps document titles out of the answers.</sub>
+</p>
 
-![Watches](docs/screenshots/watches.png)
+<p align="center">
+  <img src="docs/screenshots/engines.png" alt="Engine settings" width="100%" />
+  <br>
+  <sub><strong>Engines:</strong> The brain and the memory are configured separately, so a cloud chat model can sit next to a local embedder. Below, the grounding rules: abstention sentence, relevance judge, thresholds.</sub>
+</p>
 
-**Watches.** Folders that feed themselves into the memory. Sync leaves files in place, hoover moves them in. Each card shows what is ready, queued or failed, when it was last scanned, and can be paused without losing anything.
-
-![Assistant editor](docs/screenshots/assistant-editor.png)
-
-**Assistants.** A profile is a mission, a knowledge scope, an engine and a set of caps. The token caps bound an API bill, and hiding source names keeps document titles out of the answers.
-
-![Engines](docs/screenshots/engines.png)
-
-**Engines.** The brain and the memory are configured separately, so a cloud chat model can sit next to a local embedder. Below, the grounding rules: abstention sentence, relevance judge, thresholds.
-
-![Observatory](docs/screenshots/observatory.png)
-
-**Observatory.** Latency, tokens per second, success rate and the activity log, measured on the machine. No simulated data.
+<p align="center">
+  <img src="docs/screenshots/observatory.png" alt="Observatory metrics" width="100%" />
+  <br>
+  <sub><strong>Observatory:</strong> Latency, tokens per second, success rate and the activity log, measured on the machine. No simulated data.</sub>
+</p>
 
 ### What it does
 
@@ -147,13 +159,13 @@ llama.cpp tunes itself for the CPU that compiles it, so build the image on the h
 
 ### Project layout
 
-| Path             | Contents                                                            |
-| ---------------- | ------------------------------------------------------------------- |
-| `src/`           | React interface, `locales/fr.ts` holds the French strings           |
-| `src-tauri/src/` | Rust core: ingestion, retrieval, pipeline, engines, server, bundles |
-| `docker/`        | Server image and Compose file                                       |
-| `docs/`          | [Detailed guide](docs/GUIDE.md)                                     |
-| `scripts/`       | Install helpers, dataset tooling, deployment                        |
+| Path             | Contents                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `src/`           | React interface, `locales/fr.ts` holds the French strings                                                                    |
+| `src-tauri/src/` | Rust core: ingestion, retrieval, pipeline, engines, server, bundles                                                          |
+| `docker/`        | Server image and Compose file                                                                                                |
+| `docs/`          | [Detailed guide](docs/GUIDE.md), also published at [infinition.github.io/langolier](https://infinition.github.io/langolier/) |
+| `scripts/`       | Install helpers, dataset tooling, deployment                                                                                 |
 
 ### Language
 
@@ -171,31 +183,43 @@ Langolier indexe ce que vous possédez déjà et répond à partir de ça. La re
 
 L'application de bureau est en Rust avec Tauri 2 et une interface React. Le même binaire tourne aussi sans écran comme serveur de chatbot, ce qui sert à déployer un assistant exporté.
 
-![Langolier répond avec ses citations](docs/screenshots/conversation.png)
+<p align="center">
+  <img src="docs/screenshots/conversation.png" alt="Langolier répond avec ses citations" width="100%" />
+  <br>
+  <sub><strong>Conversation:</strong> Chaque phrase factuelle porte une citation numérotée, et les pastilles sous la réponse ouvrent le passage exact qui la soutient. Le pied de page indique le mode de mémoire et le modèle utilisés.</sub>
+</p>
 
 ### Tour du propriétaire
 
-**Conversation.** Chaque phrase factuelle porte une citation numérotée, et les pastilles sous la réponse ouvrent le passage exact qui la soutient. Le pied de page indique le mode de mémoire et le modèle utilisés.
+<p align="center">
+  <img src="docs/screenshots/sources.png" alt="Bibliothèque de sources" width="100%" />
+  <br>
+  <sub><strong>Sources:</strong> Une ligne par fichier ingéré, avec sa langue, son nombre de passages et combien portent déjà un vecteur. Liste, arborescence et recherche plein texte partagent la même vue, et un dossier de l'arbre se réindexe ou se retire d'un clic.</sub>
+</p>
 
-![Sources](docs/screenshots/sources.png)
+<p align="center">
+  <img src="docs/screenshots/watches.png" alt="Dossiers surveillés" width="100%" />
+  <br>
+  <sub><strong>Vigies:</strong> Des dossiers qui alimentent la mémoire tout seuls. Suivi laisse les fichiers en place, aspiration les déplace. Chaque carte montre ce qui est prêt, en file ou en erreur, la date du dernier passage, et se met en pause sans rien perdre.</sub>
+</p>
 
-**Sources.** Une ligne par fichier ingéré, avec sa langue, son nombre de passages et combien portent déjà un vecteur. Liste, arborescence et recherche plein texte partagent la même vue, et un dossier de l'arbre se réindexe ou se retire d'un clic.
+<p align="center">
+  <img src="docs/screenshots/assistant-editor.png" alt="Éditeur d'assistant" width="100%" />
+  <br>
+  <sub><strong>Assistants:</strong> Un profil, c'est une mission, un périmètre de connaissances, un moteur et des plafonds. Les plafonds de tokens bornent une facture d'API, et masquer les noms de sources garde vos titres de documents hors des réponses.</sub>
+</p>
 
-![Vigies](docs/screenshots/watches.png)
+<p align="center">
+  <img src="docs/screenshots/engines.png" alt="Réglages des moteurs" width="100%" />
+  <br>
+  <sub><strong>Moteurs:</strong> Le cerveau et la mémoire se règlent séparément : un modèle de conversation cloud peut cohabiter avec un embeddeur local. En dessous, les règles d'ancrage : phrase d'abstention, juge de pertinence, seuils.</sub>
+</p>
 
-**Vigies.** Des dossiers qui alimentent la mémoire tout seuls. Suivi laisse les fichiers en place, aspiration les déplace. Chaque carte montre ce qui est prêt, en file ou en erreur, la date du dernier passage, et se met en pause sans rien perdre.
-
-![Éditeur d'assistant](docs/screenshots/assistant-editor.png)
-
-**Assistants.** Un profil, c'est une mission, un périmètre de connaissances, un moteur et des plafonds. Les plafonds de tokens bornent une facture d'API, et masquer les noms de sources garde vos titres de documents hors des réponses.
-
-![Moteurs](docs/screenshots/engines.png)
-
-**Moteurs.** Le cerveau et la mémoire se règlent séparément : un modèle de conversation cloud peut cohabiter avec un embeddeur local. En dessous, les règles d'ancrage : phrase d'abstention, juge de pertinence, seuils.
-
-![Observatoire](docs/screenshots/observatory.png)
-
-**Observatoire.** Latence, tokens par seconde, taux de succès et journal d'activité, mesurés sur la machine. Aucune donnée simulée.
+<p align="center">
+  <img src="docs/screenshots/observatory.png" alt="Métriques de l'observatoire" width="100%" />
+  <br>
+  <sub><strong>Observatoire:</strong> Latence, tokens par seconde, taux de succès et journal d'activité, mesurés sur la machine. Aucune donnée simulée.</sub>
+</p>
 
 ### Ce que ça fait
 
@@ -296,13 +320,13 @@ llama.cpp s'optimise pour le processeur qui le compile : construisez l'image sur
 
 ### Organisation du dépôt
 
-| Chemin           | Contenu                                                               |
-| ---------------- | --------------------------------------------------------------------- |
-| `src/`           | Interface React, `locales/fr.ts` porte les chaînes françaises         |
-| `src-tauri/src/` | Cœur Rust : ingestion, recherche, pipeline, moteurs, serveur, bundles |
-| `docker/`        | Image serveur et fichier Compose                                      |
-| `docs/`          | [Guide détaillé](docs/GUIDE.md)                                       |
-| `scripts/`       | Scripts d'installation, outillage dataset, déploiement                |
+| Chemin           | Contenu                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/`           | Interface React, `locales/fr.ts` porte les chaînes françaises                                                               |
+| `src-tauri/src/` | Cœur Rust : ingestion, recherche, pipeline, moteurs, serveur, bundles                                                       |
+| `docker/`        | Image serveur et fichier Compose                                                                                            |
+| `docs/`          | [Guide détaillé](docs/GUIDE.md), publié aussi sur [infinition.github.io/langolier](https://infinition.github.io/langolier/) |
+| `scripts/`       | Scripts d'installation, outillage dataset, déploiement                                                                      |
 
 ### Langue
 
