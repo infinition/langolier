@@ -218,6 +218,7 @@ pub fn sync(exe_dir: &Path, data_dir: &Path) -> Res<Option<String>> {
     install(bytes, data_dir)?;
     Ok(Some(name.clone()))
 }
+#[cfg(target_os = "macos")]
 fn base64_decode(s: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.len() * 3 / 4);
     let mut buf = 0u32;
@@ -694,6 +695,7 @@ fn write_kit_scripts(
         "# {name}\n\nChatbot exported from Langolier.\n\n## Contents\n\n- `{slug}.langolier`: the profile, its settings and its knowledge. **This is the only file to replace when updating** (name, mission, image, theme, knowledge). Drop the new version here and the launcher picks it up in under 30 seconds, without a restart, keeping conversations.\n- `{name}.app` (Mac) or `chatbotgui`: standalone chat window.\n- `{name} Web.app` (Mac) or `chatbotweb`: opens the chat page in the browser (port 8787).\n- `server.sh` / `server.bat`: the same page served on the network, headless, port 8080.\n{foreign_note}\n## Other systems\n\nLaunchers are platform specific; the `.langolier` is universal. For Windows or Linux, grab that platform's launchers (`chatbotgui`, `chatbotweb`) from the Langolier releases and drop them next to the `.langolier`.\n\n## Engine and prerequisites\n\n{requirements}\n\nOptions: `--serve --host 0.0.0.0 --port 8080 --data /path`, `--gui`.\n",
         foreign_note = if foreign > 0 { format!("- `other-platform-launchers/`: {foreign} launcher(s) for other systems.\n") } else { String::new() }
     );
+    #[cfg_attr(not(unix), allow(unused_variables))]
     for (file, content, exec) in [
         ("server.sh", sh, true),
         ("server.bat", bat, false),

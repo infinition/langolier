@@ -7,6 +7,8 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

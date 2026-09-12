@@ -64,6 +64,7 @@ jobs:
         env:
           # No certificate: ad hoc signing on macOS, unsigned elsewhere.
           CI: true
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
 
       - name: Locate the binary
         id: bin
