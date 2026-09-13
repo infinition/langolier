@@ -275,6 +275,14 @@ pub fn sync(exe_dir: &Path, data_dir: &Path) -> Res<Option<String>> {
     archive(data_dir, &bytes, from_kit)?;
     Ok(Some(c.name.clone()))
 }
+/// Bumps the mtime so the file becomes the newest candidate. Windows wants a
+/// writable handle for that.
+fn touch(path: &Path) -> std::io::Result<()> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)?
+        .set_modified(std::time::SystemTime::now())
+}
 pub fn store_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("bundles")
 }
@@ -407,9 +415,7 @@ fn store_entry(data_dir: &Path, id: &str) -> Res<StoreEntry> {
 pub fn store_restore(data_dir: &Path, id: &str) -> Res<String> {
     let e = store_entry(data_dir, id)?;
     let bytes = std::fs::read(&e.path).map_err(err)?;
-    std::fs::File::open(&e.path)
-        .and_then(|f| f.set_modified(std::time::SystemTime::now()))
-        .map_err(err)?;
+    touch(&e.path).map_err(err)?;
     install(&bytes, data_dir)?;
     Ok(e.name)
 }
@@ -432,9 +438,7 @@ pub fn store_import(data_dir: &Path, bytes: &[u8]) -> Res<String> {
     let _ = std::fs::remove_file(&staged);
     let a = checked?;
     let file = archive(data_dir, bytes, false)?;
-    std::fs::File::open(&file)
-        .and_then(|f| f.set_modified(std::time::SystemTime::now()))
-        .map_err(err)?;
+    touch(&file).map_err(err)?;
     install(bytes, data_dir)?;
     Ok(a.name)
 }
