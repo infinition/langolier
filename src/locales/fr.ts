@@ -871,4 +871,8 @@ export const FR: Record<string, string> = {
   Copy: "Copier",
   Copied: "Copié",
   "Copy failed": "Copie impossible",
+  "Add a source, or narrow the question.":
+    "Ajoutez une source, ou précisez la question.",
+  "Nothing in your sources supports an answer. Add a source, narrow the question, or switch to Free conversation.":
+    "Rien dans vos sources ne permet de répondre. Ajoutez une source, précisez la question, ou passez en Conversation libre.",
 };

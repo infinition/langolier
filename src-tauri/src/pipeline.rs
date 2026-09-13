@@ -135,11 +135,7 @@ async fn run(
     let persona = assistant::persona(profile);
     let text = if mode != "general" && sources.is_empty() {
         status = "abstained";
-        if profile.is_some() {
-            abstain.clone()
-        } else {
-            format!("{abstain}\n\nAdd a source or narrow your question. You can also switch to Free conversation mode.")
-        }
+        abstain.clone()
     } else {
         let evidence = rag::context(&sources);
         let system = if mode == "general" {

@@ -14,6 +14,7 @@ interface Turn {
   error?: string;
   sources: Source[];
   done: boolean;
+  hint?: string;
 }
 
 // Floating window opened by the global shortcut.
@@ -102,13 +103,21 @@ export default function Palette() {
       if (!conversation.current) {
         conversation.current = await api<string>("new_conversation");
       }
-      const r = await api<{ content: string }>("chat", {
+      const r = await api<{ content: string; status: string }>("chat", {
         conversationId: conversation.current,
         question: q,
         mode: "hybrid",
         assisted: false,
       });
-      patchLast((t) => ({ ...t, answer: r.content, done: true }));
+      patchLast((turn) => ({
+        ...turn,
+        answer: r.content,
+        done: true,
+        hint:
+          r.status === "abstained"
+            ? t("Add a source, or narrow the question.")
+            : undefined,
+      }));
     } catch (e) {
       const error = errorText(e);
       patchLast((t) => ({ ...t, error, done: true }));
@@ -180,6 +189,7 @@ export default function Palette() {
                 ) : (
                   <p className="palette-phase">{phase || "…"}</p>
                 )}
+                {t.hint && <p className="palette-hint-line">{t.hint}</p>}
                 {t.done && t.sources.length > 0 && (
                   <p className="palette-sources">
                     {t.sources.slice(0, 4).map((s, j) => (

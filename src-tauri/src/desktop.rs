@@ -169,6 +169,7 @@ fn palette_window(app: &tauri::AppHandle) -> Res<tauri::WebviewWindow> {
     .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
+    .shadow(false)
     .visible(false);
     if let Some(monitor) = app.primary_monitor().ok().flatten() {
         let size = monitor.size();

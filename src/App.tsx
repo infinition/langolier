@@ -390,9 +390,16 @@ export default function App() {
         { id: "pending", role: "user", content: q, sources: [] },
       ]);
       const response = await api<{
+        status: string;
         citation_check: { invalid: number[]; missing: boolean };
       }>("chat", { conversationId: id, question: q, mode, assisted });
       setMessages(await api<Message[]>("messages", { id }));
+      if (response.status === "abstained")
+        notify(
+          t(
+            "Nothing in your sources supports an answer. Add a source, narrow the question, or switch to Free conversation.",
+          ),
+        );
       if (
         response.citation_check.invalid.length ||
         response.citation_check.missing

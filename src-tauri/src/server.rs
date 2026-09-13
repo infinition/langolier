@@ -287,6 +287,7 @@ fn toggle_palette(app: &tauri::AppHandle) {
             .transparent(true)
             .always_on_top(true)
             .skip_taskbar(true)
+            .shadow(false)
             .visible(false);
             if let Some(m) = app.primary_monitor().ok().flatten() {
                 let (mw, mh) = (
