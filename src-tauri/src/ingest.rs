@@ -140,7 +140,7 @@ pub fn queue(db: &Db, paths: Vec<String>) -> Res<Value> {
 }
 pub fn paste(db: &Db, title: &str, text: &str) -> Res<Value> {
     if text.trim().is_empty() {
-        return Err("Le texte est vide.".into());
+        return Err("The text is empty.".into());
     }
     if text.len() > 20_000_000 {
         return Err("Text capped at 20 MB per source.".into());
@@ -196,9 +196,7 @@ pub struct Section {
 }
 pub fn notebook(text: &str) -> Res<Vec<Section>> {
     let v: Value = serde_json::from_str(text).map_err(err)?;
-    let cells = v["cells"]
-        .as_array()
-        .ok_or("Notebook invalide : cells absent")?;
+    let cells = v["cells"].as_array().ok_or("Invalid notebook: no cells")?;
     Ok(cells
         .iter()
         .enumerate()
@@ -340,7 +338,7 @@ async fn transcribe(
     let language = v["result"]["language"].as_str().map(String::from);
     let parts = v["transcription"]
         .as_array()
-        .ok_or("Transcription Whisper vide")?;
+        .ok_or("Empty Whisper transcription")?;
     let sections = parts
         .iter()
         .map(|p| Section {

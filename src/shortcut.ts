@@ -17,7 +17,7 @@ const LABELS: Record<string, string> = {
   ArrowRight: "→",
 };
 export function formatShortcut(accel: string): string {
-  if (!accel) return "Aucun";
+  if (!accel) return t("None");
   return accel
     .split("+")
     .map((part) => {

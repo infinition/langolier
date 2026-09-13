@@ -809,4 +809,39 @@ export const FR: Record<string, string> = {
     "Le secret d’administration doit faire au moins 12 caractères.",
   "Remote administration needs a secret.":
     "L’administration à distance exige un secret.",
+  "Chat model (curated tag, or path to a GGUF file)":
+    "Modèle de conversation (tag de la liste, ou chemin d’un fichier GGUF)",
+  "A curated tag is downloaded once into the app cache with the button below, then loaded on demand. llama.cpp runs inside Langolier: nothing to install, nothing listening on a port.":
+    "Un tag de la liste se télécharge une fois dans le cache de l’application avec le bouton ci-dessous, puis se charge à la demande. llama.cpp tourne dans Langolier : rien à installer, rien qui écoute sur un port.",
+  "Embedding model (curated tag, or path to a GGUF file)":
+    "Modèle d’embeddings (tag de la liste, ou chemin d’un fichier GGUF)",
+  Other: "Autre",
+  "Curated tags land in the app cache; other names go through Ollama":
+    "Les tags de la liste vont dans le cache de l’application ; les autres noms passent par Ollama",
+  "Unload idle models after (minutes, 0 = never)":
+    "Décharger les modèles inactifs après (minutes, 0 = jamais)",
+  "Memory is released when the engine has not been used for this long, and the next question reloads the model in a few seconds.":
+    "La mémoire est rendue quand le moteur n’a pas servi pendant cette durée ; la question suivante recharge le modèle en quelques secondes.",
+  "Chat model not downloaded: {}. Install it from the Engines page.":
+    "Modèle de conversation non téléchargé : {}. Installez-le depuis la page Moteurs.",
+  "Unsupported provider": "Fournisseur non pris en charge",
+  queued: "en attente",
+  None: "Aucun",
+  "Assistant not found": "Assistant introuvable",
+  "Conversation not found": "Conversation introuvable",
+  "Passage not found": "Passage introuvable",
+  "Pick a destination folder.": "Choisissez un dossier de destination.",
+  "Invalid rating": "Note invalide",
+  "Empty question": "Question vide",
+  "This file is not a Langolier bundle.":
+    "Ce fichier n’est pas un bundle Langolier.",
+  "The text is empty.": "Le texte est vide.",
+  "Invalid search mode": "Mode de recherche invalide",
+  "This conversation has reached its limit. Open a new one to continue.":
+    "Cette conversation a atteint sa limite. Ouvrez une nouvelle conversation pour continuer.",
+  "This path is not a folder.": "Ce chemin n’est pas un dossier.",
+  "Watch not found": "Vigie introuvable",
+  "This file is not a valid zip archive.":
+    "Ce fichier n’est pas une archive zip valide.",
+  "Empty Whisper transcription": "Transcription Whisper vide",
 };

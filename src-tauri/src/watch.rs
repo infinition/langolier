@@ -59,7 +59,7 @@ fn validate_dir(raw: &str, db: &Db) -> Res<PathBuf> {
         .canonicalize()
         .map_err(|e| format!("Dossier inaccessible : {e}"))?;
     if !p.is_dir() {
-        return Err("Ce chemin n'est pas un dossier.".into());
+        return Err("This path is not a folder.".into());
     }
     let root = db.root.canonicalize().unwrap_or(db.root.clone());
     if p.starts_with(&root) || root.starts_with(&p) {
@@ -148,7 +148,7 @@ pub fn remove(db: &Db, id: &str, forget: bool) -> Res<Value> {
         .map_err(err)?;
     tx.commit().map_err(err)?;
     if n == 0 {
-        return Err("Vigie introuvable".into());
+        return Err("Watch not found".into());
     }
     Ok(json!({"documents": docs, "forgotten": forget}))
 }
@@ -228,7 +228,7 @@ pub fn scan(db: &Db, id: &str) -> Res<Value> {
             [id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)),
         )
-        .map_err(|_| "Vigie introuvable".to_string())?;
+        .map_err(|_| "Watch not found".to_string())?;
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         let msg = "Folder not found (volume unmounted?)";
@@ -439,7 +439,7 @@ mod tests {
         );
         assert!(
             add(&db, data.path().to_str().unwrap(), "sync", true, None).is_err(),
-            "dossier de donnees refuse"
+            "data folder refused"
         );
         assert!(add(&db, "/nulle/part", "sync", true, None).is_err());
         settle();
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(r["moved"], 1, "{r}");
         assert!(
             !folder.path().join("depot.txt").exists(),
-            "le dossier surveille est vide"
+            "the watched folder is empty"
         );
         let source: String = c
             .query_row(

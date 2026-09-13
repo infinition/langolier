@@ -20,6 +20,5 @@ if [ ! -f "$model_dir/ggml-base.bin" ]; then
   printf '%s  %s\n' '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe' "$model_dir/ggml-base.bin.part" | sha256sum -c -
   mv "$model_dir/ggml-base.bin.part" "$model_dir/ggml-base.bin"
 fi
-echo 'Install Ollama from https://ollama.com/download/linux, start ollama serve, then:'
-echo 'ollama pull qwen3:8b && ollama pull embeddinggemma'
-echo 'Ensure ~/.local/bin is on PATH. Run ./Launch-Linux.sh.'
+echo 'Ensure ~/.local/bin is on PATH. Run ./Launch-Linux.sh, then install the models from Engines.'
+echo 'Ollama is optional: https://ollama.com/download/linux, if you prefer it to the built-in engine.'

@@ -33,7 +33,7 @@ impl<'a> Zip<'a> {
         let eocd = (start..=data.len().saturating_sub(22))
             .rev()
             .find(|&i| data[i..i + 4] == [0x50, 0x4b, 0x05, 0x06])
-            .ok_or("Ce fichier n'est pas une archive zip valide.")?;
+            .ok_or("This file is not a valid zip archive.")?;
         let count = le16(data, eocd + 10)?;
         let mut off = le32(data, eocd + 16)?;
         if off == 0xFFFF_FFFF || count == 0xFFFF {
@@ -66,7 +66,7 @@ impl<'a> Zip<'a> {
             .entries
             .iter()
             .find(|e| e.0 == name)
-            .ok_or_else(|| format!("Membre « {name} » absent de l'archive."))?;
+            .ok_or_else(|| format!("Member \"{name}\" missing from the archive."))?;
         let d = self.data;
         if d.get(*local..*local + 4).ok_or(TRUNC)? != [0x50, 0x4b, 0x03, 0x04] {
             return Err(TRUNC.into());
@@ -465,7 +465,7 @@ mod fixtures {
                         .collect::<String>()
                 );
             }
-            assert!(total > 0, "{} : texte vide", p.display());
+            assert!(total > 0, "{}: empty text", p.display());
         }
         assert!(seen > 0, "aucun fichier bureautique dans {dir}");
     }

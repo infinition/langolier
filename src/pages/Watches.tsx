@@ -503,7 +503,7 @@ function WatchDetail({
               {running.slice(0, 200).map((d) => (
                 <li key={d.id}>
                   <span className="truncate">{d.name}</span>
-                  <em>{d.status === "processing" ? d.stage : "en attente"}</em>
+                  <em>{d.status === "processing" ? d.stage : t("queued")}</em>
                 </li>
               ))}
             </ul>

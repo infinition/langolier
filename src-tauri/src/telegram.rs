@@ -167,7 +167,7 @@ pub async fn poll(db: Db, generation: Arc<tokio::sync::Mutex<()>>) {
         let v = match updates {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Telegram : {e} — nouvel essai dans {backoff} s");
+                eprintln!("Telegram: {e}, retrying in {backoff} s");
                 tokio::time::sleep(Duration::from_secs(backoff)).await;
                 backoff = (backoff * 2).min(120);
                 continue;

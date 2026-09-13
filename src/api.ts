@@ -4,10 +4,10 @@ import { ABSTAIN_TEXT, type Snapshot } from "./types";
 export const desktop = isTauri();
 export const initial: Snapshot = {
   settings: {
-    provider: "ollama",
+    provider: "embedded",
     endpoint: "http://127.0.0.1:11434",
-    model: "qwen3:8b",
-    embedding_endpoint: "http://127.0.0.1:11434",
+    model: "qwen3:4b-instruct",
+    embedding_endpoint: "embedded",
     embedding_model: "embeddinggemma",
     whisper_model: "",
     top_k: 6,
@@ -28,6 +28,7 @@ export const initial: Snapshot = {
     watch_interval: 30,
     active_assistant: "",
     ingestion_paused: false,
+    engine_idle_minutes: 5,
   },
   documents: [],
   conversations: [],

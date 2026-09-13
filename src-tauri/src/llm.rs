@@ -31,8 +31,27 @@ pub const EMBED_MODELS: [EmbedModel; 4] = [
     EmbedModel { tag: "embeddinggemma", label: "EmbeddingGemma 300M (multilingual, light)", gguf_url: "https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf", gguf_file: "embeddinggemma-300M-Q8_0.gguf", dims: 768 },
     EmbedModel { tag: "qwen3-embedding:0.6b", label: "Qwen3-Embedding 0.6B (multilingual, more accurate, heavier)", gguf_url: "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf", gguf_file: "Qwen3-Embedding-0.6B-Q8_0.gguf", dims: 1024 },
     EmbedModel { tag: "nomic-embed-text", label: "nomic-embed-text v1.5 (mostly English, very light)", gguf_url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q8_0.gguf", gguf_file: "nomic-embed-text-v1.5.Q8_0.gguf", dims: 768 },
-    EmbedModel { tag: "bge-m3", label: "bge-m3 (multilingue, excellent, lourd)", gguf_url: "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf", gguf_file: "bge-m3-Q8_0.gguf", dims: 1024 },
+    EmbedModel { tag: "bge-m3", label: "bge-m3 (multilingual, excellent, heavy)", gguf_url: "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf", gguf_file: "bge-m3-Q8_0.gguf", dims: 1024 },
 ];
+/// Chat models proven on strict grounding, each with a downloadable GGUF so
+/// the embedded engine needs no Ollama. Tags match Ollama's, so one name
+/// works with either engine.
+pub struct ChatModel {
+    pub tag: &'static str,
+    pub label: &'static str,
+    pub gguf_url: &'static str,
+    pub gguf_file: &'static str,
+    pub bytes: u64,
+}
+pub const CHAT_MODELS: [ChatModel; 3] = [
+    ChatModel { tag: "qwen3:8b", label: "Qwen3 8B Q4_K_M (5.0 GB, safest, ~17 tok/s)", gguf_url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf", gguf_file: "Qwen3-8B-Q4_K_M.gguf", bytes: 5_030_000_000 },
+    ChatModel { tag: "qwen3:4b-instruct", label: "Qwen3 4B Instruct Q4_K_M (2.5 GB, recommended, ~30 tok/s)", gguf_url: "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", gguf_file: "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", bytes: 2_500_000_000 },
+    ChatModel { tag: "qwen3:1.7b", label: "Qwen3 1.7B Q8_0 (1.8 GB, very fast, may drift to English)", gguf_url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf", gguf_file: "Qwen3-1.7B-Q8_0.gguf", bytes: 1_830_000_000 },
+];
+pub fn chat_model(tag: &str) -> Option<&'static ChatModel> {
+    let t = tag.trim().trim_end_matches(":latest");
+    CHAT_MODELS.iter().find(|m| m.tag == t)
+}
 pub fn embed_model(tag: &str) -> &'static EmbedModel {
     let t = tag.trim().trim_end_matches(":latest");
     EMBED_MODELS
@@ -150,7 +169,12 @@ pub async fn embeddings(s: &Settings, texts: &[String]) -> Res<Vec<Vec<f32>>> {
 pub async fn models(s: &Settings) -> Res<Value> {
     if s.provider == EMBEDDED {
         let path = crate::engine::resolve(&s.model)?;
-        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(&path).map(|m| m.len()).map_err(|_| {
+            format!(
+                "Chat model not downloaded: {}. Install it from the Engines page.",
+                s.model
+            )
+        })?;
         return Ok(json!([{"name": s.model, "size": size}]));
     }
     let base = chat_endpoint(s)?;

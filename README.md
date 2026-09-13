@@ -98,22 +98,23 @@ npm run tauri build
 
 For development, `npm run desktop` starts Vite and the Tauri shell with hot reload.
 
-On macOS, `Launch-Mac.command` opens the app and starts Ollama when needed; `Stop-Ollama.command` shuts Ollama down so no model stays in memory.
+On macOS, `Launch-Mac.command` opens the app and starts Ollama only if the settings use it; `Stop-Ollama.command` shuts Ollama down so no model stays in memory.
 
 ### Pick an engine
 
 Langolier never hardcodes a model. Set the provider under **Engines**.
 
-**Fully local, Ollama.** The simplest path. Install Ollama, then:
+**Built in, the default.** llama.cpp is compiled into the binary, with Metal on Apple Silicon. Pick a curated tag, press Install, and the GGUF lands in the app cache. Nothing else to install, nothing listening on a port, and the model is unloaded after a few idle minutes so the memory comes back.
 
-```bash
-ollama pull qwen3:8b
-ollama pull embeddinggemma
-```
+| Tag                 | Weights | Notes                                                                         |
+| ------------------- | ------- | ----------------------------------------------------------------------------- |
+| `qwen3:4b-instruct` | 2.5 GB  | Recommended: same grounding behaviour as the 8B in our tests, twice the speed |
+| `qwen3:8b`          | 5.0 GB  | Safest on strict grounding, about 17 tok/s on an M-series Mac                 |
+| `qwen3:1.7b`        | 1.8 GB  | Very fast, may drift to English                                               |
 
-Point the chat endpoint at `http://127.0.0.1:11434`. `qwen3:8b` is the safest of the three tested models on strict grounding. `qwen3:4b-instruct` is twice as fast for half the footprint. Avoid the bare `qwen3:4b` Thinking variant, it leaks its reasoning into answers.
+Avoid the bare `qwen3:4b` Thinking variant, it leaks its reasoning into answers. Any other GGUF works too: give its path instead of a tag.
 
-**Fully local, no daemon.** Select the embedded provider and point it at a GGUF file. llama.cpp is compiled into the binary, with Metal on Apple Silicon. Nothing else to install and nothing listening on a port.
+**Ollama, optional.** If you already run Ollama, select it as the provider and point at `http://127.0.0.1:11434`; the same tags apply. Weights already pulled by Ollama are linked into the built-in engine's cache instead of being downloaded twice.
 
 **Cloud API.** OpenAI, DeepSeek, Anthropic, or any OpenAI-compatible endpoint such as Mistral, Groq or OpenRouter. Your questions and the retrieved passages go to that provider. The index and the vectors stay local. Keys live in the app database in clear text, like the rest of the settings, so protect your session.
 
@@ -263,22 +264,23 @@ npm run tauri build
 
 Pour développer, `npm run desktop` lance Vite et la coquille Tauri avec rechargement à chaud.
 
-Sur macOS, `Launch-Mac.command` ouvre l'app et démarre Ollama si besoin ; `Stop-Ollama.command` l'arrête pour qu'aucun modèle ne reste en mémoire.
+Sur macOS, `Launch-Mac.command` ouvre l'app et ne démarre Ollama que si les réglages s'en servent ; `Stop-Ollama.command` l'arrête pour qu'aucun modèle ne reste en mémoire.
 
 ### Choisir un moteur
 
 Langolier ne fige aucun modèle. Le fournisseur se règle dans **Moteurs**.
 
-**Tout local, avec Ollama.** Le plus simple. Installez Ollama, puis :
+**Embarqué, par défaut.** llama.cpp est compilé dans le binaire, avec Metal sur Apple Silicon. Choisissez un tag de la liste, cliquez sur Installer, et le GGUF arrive dans le cache de l'application. Rien d'autre à installer, rien qui écoute sur un port, et le modèle est déchargé après quelques minutes d'inactivité pour rendre la mémoire.
 
-```bash
-ollama pull qwen3:8b
-ollama pull embeddinggemma
-```
+| Tag                 | Poids  | Notes                                                                     |
+| ------------------- | ------ | ------------------------------------------------------------------------- |
+| `qwen3:4b-instruct` | 2,5 Go | Recommandé : même ancrage que le 8B dans nos tests, deux fois plus rapide |
+| `qwen3:8b`          | 5,0 Go | Le plus sûr sur l'ancrage strict, environ 17 tok/s sur un Mac M           |
+| `qwen3:1.7b`        | 1,8 Go | Très rapide, peut glisser vers l'anglais                                  |
 
-Pointez l'adresse de conversation sur `http://127.0.0.1:11434`. `qwen3:8b` est le plus sûr des trois modèles testés sur l'ancrage strict. `qwen3:4b-instruct` va deux fois plus vite pour moitié moins lourd. Évitez le `qwen3:4b` nu, variante Thinking : il laisse fuir son raisonnement dans la réponse.
+Évitez le `qwen3:4b` nu, variante Thinking : il laisse fuir son raisonnement dans la réponse. N'importe quel autre GGUF fonctionne aussi : donnez son chemin à la place du tag.
 
-**Tout local, sans démon.** Choisissez le fournisseur embarqué et donnez-lui un fichier GGUF. llama.cpp est compilé dans le binaire, avec Metal sur Apple Silicon. Rien d'autre à installer, rien qui écoute sur un port.
+**Ollama, en option.** Si vous avez déjà Ollama, choisissez-le comme fournisseur et pointez sur `http://127.0.0.1:11434` ; les mêmes tags s'appliquent. Les poids déjà récupérés par Ollama sont liés dans le cache du moteur embarqué au lieu d'être téléchargés deux fois.
 
 **API cloud.** OpenAI, DeepSeek, Anthropic, ou n'importe quelle adresse compatible OpenAI comme Mistral, Groq ou OpenRouter. Vos questions et les passages retrouvés partent chez ce fournisseur. L'index et les vecteurs restent locaux. Les clés sont dans la base de l'application en clair, comme le reste des réglages : protégez votre session.
 

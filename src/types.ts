@@ -25,6 +25,7 @@ export interface Settings {
   watch_interval: number;
   active_assistant: string;
   ingestion_paused: boolean;
+  engine_idle_minutes: number;
 }
 export interface Assistant {
   id: string;

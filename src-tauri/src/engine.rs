@@ -11,9 +11,21 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc, Arc, OnceLock,
 };
+use std::time::{Duration, Instant};
+
+/// Seconds a model may sit unused before it is unloaded; 0 keeps it forever.
+static IDLE_SECS: AtomicU64 = AtomicU64::new(300);
+pub fn set_idle_secs(secs: u64) {
+    IDLE_SECS.store(secs, Ordering::Relaxed);
+}
+/// Where curated tags such as `qwen3:4b-instruct` resolve to a GGUF.
+static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub fn set_cache_dir(dir: PathBuf) {
+    let _ = CACHE_DIR.set(dir);
+}
 
 pub struct GenParams {
     pub temperature: f32,
@@ -64,6 +76,18 @@ pub fn resolve(path: &str) -> Res<PathBuf> {
     let p = PathBuf::from(path.trim());
     if p.is_absolute() {
         return Ok(p);
+    }
+    // A curated tag maps to its cached GGUF.
+    if let (Some(spec), Some(dir)) = (crate::llm::chat_model(path), CACHE_DIR.get()) {
+        return Ok(dir.join(spec.gguf_file));
+    }
+    if let (Some(dir), Some(spec)) = (
+        CACHE_DIR.get(),
+        crate::llm::EMBED_MODELS
+            .iter()
+            .find(|m| m.tag == path.trim()),
+    ) {
+        return Ok(dir.join(spec.gguf_file));
     }
     let base = crate::bundle::bundle_dir()?;
     let candidate = base.join(&p);
@@ -160,7 +184,21 @@ fn worker(rx: mpsc::Receiver<Req>) {
         backend,
         models: HashMap::new(),
     };
-    while let Ok(req) = rx.recv() {
+    let mut last_used = Instant::now();
+    loop {
+        // Wake up regularly to release memory once the models sit idle.
+        let req = match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(r) => r,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let idle = IDLE_SECS.load(Ordering::Relaxed);
+                if idle > 0 && !w.models.is_empty() && last_used.elapsed().as_secs() >= idle {
+                    w.models.clear();
+                }
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        last_used = Instant::now();
         match req {
             Req::Generate {
                 model,
@@ -225,7 +263,7 @@ fn run_generate(
     let n_ctx = params.n_ctx.clamp(2048, model.n_ctx_train().max(2048));
     if tokens.len() as u32 + 16 > n_ctx {
         return Err(format!(
-            "Contexte trop court : {} tokens de prompt pour {n_ctx}.",
+            "Context too short: {} prompt tokens for {n_ctx}.",
             tokens.len()
         ));
     }

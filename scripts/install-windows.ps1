@@ -31,15 +31,8 @@ if (-not (Test-Path $model)) {
     if ((Get-FileHash "$model.part" -Algorithm SHA256).Hash.ToLower() -ne '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe') { throw 'Whisper model checksum mismatch.' }
     Move-Item "$model.part" $model
 }
-Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden
-for ($attempt = 0; $attempt -lt 30; $attempt++) {
-    try { Invoke-RestMethod 'http://127.0.0.1:11434/api/version' | Out-Null; break } catch { Start-Sleep 1 }
-}
-ollama pull qwen3:8b
-if ($LASTEXITCODE -ne 0) { throw 'Conversation model download failed.' }
-ollama pull embeddinggemma
-if ($LASTEXITCODE -ne 0) { throw 'Embedding model download failed.' }
 Write-Host 'Ready. Restart the terminal or app to refresh PATH, then use Launch-Windows.bat.'
+Write-Host 'Install the chat and embedding models from Engines. Ollama is optional.'
 
 $tessdata = Join-Path $modelDir 'tessdata'
 New-Item -ItemType Directory -Force -Path $tessdata | Out-Null

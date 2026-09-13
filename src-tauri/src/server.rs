@@ -197,6 +197,8 @@ pub async fn serve_with(
     }
     let db = Db::new(&data_dir)?;
     let s = db.settings()?;
+    crate::engine::set_cache_dir(bundle::gguf_cache_dir(&db));
+    crate::engine::set_idle_secs(s.engine_idle_minutes * 60);
     let profile = assistant::get(&db, &s.active_assistant)?;
     println!(
         "Assistant: {}",
@@ -797,7 +799,7 @@ async fn chat(w: &mut TcpStream, req: &Request, app: &Arc<App>) -> Res<()> {
     let question = body["question"].as_str().unwrap_or("").trim().to_string();
     let mut conversation = body["conversation_id"].as_str().unwrap_or("").to_string();
     if question.is_empty() {
-        return json_err(w, "400 Bad Request", "question vide").await;
+        return json_err(w, "400 Bad Request", "empty question").await;
     }
     let s = app.db.settings()?;
     if conversation.is_empty() || !valid_id(&conversation) {

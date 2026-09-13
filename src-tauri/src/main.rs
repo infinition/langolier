@@ -9,7 +9,7 @@ fn main() {
     langolier_lib::run();
     #[cfg(not(feature = "desktop"))]
     {
-        eprintln!("Binaire serveur : lancez-le avec --serve (voir --help dans LISEZ-MOI.md).");
+        eprintln!("Server binary: run it with --serve (see README.md).");
         std::process::exit(2);
     }
 }

@@ -81,19 +81,29 @@ The cosine floor matters more than it looks. EmbeddingGemma scores unrelated tex
 
 | Provider             | Endpoint                      | Notes                                         |
 | -------------------- | ----------------------------- | --------------------------------------------- |
-| Ollama               | `http://127.0.0.1:11434`      | Local daemon, simplest setup                  |
+| Embedded (default)   | a curated tag or a GGUF path  | llama.cpp compiled in, Metal on Apple Silicon |
+| Ollama               | `http://127.0.0.1:11434`      | Local daemon, optional                        |
 | LM Studio, llama.cpp | `http://127.0.0.1:1234/v1`    | Any local OpenAI-compatible server            |
 | OpenAI               | `https://api.openai.com/v1`   | Reasoning models refuse a forced temperature  |
 | DeepSeek             | `https://api.deepseek.com/v1` |                                               |
 | Anthropic            | `https://api.anthropic.com`   | Messages API, system prompt sent separately   |
 | Custom               | your URL                      | Mistral, Groq, OpenRouter and similar         |
-| Embedded             | a GGUF path                   | llama.cpp compiled in, Metal on Apple Silicon |
 
 Remote providers require HTTPS. Local addresses stay allowed over plain HTTP. URLs carrying credentials or query parameters are rejected.
 
 The context window and the maximum answer length are set per provider. With 24 GB of unified memory and an 8B model quantised to Q4, 8192 tokens of context is comfortable. LM Studio manages its own window inside the server.
 
 Thinking models need care. Qwen3 variants receive `/no_think`, and anything the model still emits between `<think>` and `</think>` is filtered from the stream rather than shown.
+
+### The embedded engine
+
+Three chat tags are curated, each with a downloadable GGUF: `qwen3:8b` (5.0 GB, Q4_K_M, official Qwen build), `qwen3:4b-instruct` (2.5 GB, Q4_K_M, unsloth build since Qwen publishes no GGUF for it) and `qwen3:1.7b` (1.8 GB, Q8_0, official). The four embedding tags have theirs too. **Engines > Install the model** downloads a tag into `<data>/gguf/`; when Ollama already holds the same weights they are hard linked from its blob store instead of downloaded again.
+
+Tags resolve to the cache, absolute paths are used as is, and relative paths are looked up next to the launcher, which is how exported kits find `models/chat.gguf`.
+
+Models load on first use, in a few seconds from an SSD, and stay resident until **Unload idle models after** elapses (5 minutes by default, 0 keeps them forever). A 4B chat model plus EmbeddingGemma take about 3 GB resident. Requests are served one at a time on a dedicated thread; a long ingestion batch can delay a question by a few seconds.
+
+Ollama remains a choice for people who already run it or share it between tools. It offers nothing the embedded engine lacks for Langolier: same llama.cpp, same Metal, same GGUF.
 
 ## Embeddings and reindexing
 

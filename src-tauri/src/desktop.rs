@@ -26,9 +26,10 @@ fn snapshot(state: State<AppState>) -> Res<Value> {
 #[tauri::command]
 fn save_settings(app: tauri::AppHandle, state: State<AppState>, settings: Settings) -> Res<()> {
     if !crate::llm::PROVIDERS.contains(&settings.provider.as_str()) {
-        return Err("Fournisseur non pris en charge".into());
+        return Err("Unsupported provider".into());
     }
     crate::llm::chat_endpoint(&settings)?;
+    crate::engine::set_idle_secs(settings.engine_idle_minutes * 60);
     if settings.embedding_endpoint.trim() == crate::llm::EMBEDDED {
         if !crate::engine::available(&settings.embedding_model) {
             return Err(format!(
@@ -234,7 +235,7 @@ fn delete_conversation(state: State<AppState>, id: String) -> Res<()> {
         .execute("DELETE FROM conversations WHERE id=?1", [id])
         .map_err(err)?;
     if n == 0 {
-        return Err("Conversation introuvable".into());
+        return Err("Conversation not found".into());
     }
     Ok(())
 }
@@ -299,7 +300,7 @@ async fn update_chunk(state: State<'_, AppState>, id: i64, text: String) -> Res<
         .execute("UPDATE chunks SET text=?2 WHERE id=?1", params![id, text])
         .map_err(err)?;
     if n == 0 {
-        return Err("Passage introuvable".into());
+        return Err("Passage not found".into());
     }
     let warning = reembed(&state.db, &[id]).await?;
     Ok(json!({"updated": 1, "warning": warning}))
@@ -446,7 +447,7 @@ fn delete_chunk(state: State<AppState>, id: i64) -> Res<()> {
         .execute("DELETE FROM chunks WHERE id=?1", [id])
         .map_err(err)?;
     if n == 0 {
-        return Err("Passage introuvable".into());
+        return Err("Passage not found".into());
     }
     Ok(())
 }
@@ -567,11 +568,11 @@ async fn export_assistant(
     engine: Option<String>,
 ) -> Res<Value> {
     let db = state.db.clone();
-    let a = crate::assistant::get(&db, &id)?.ok_or("Assistant introuvable")?;
+    let a = crate::assistant::get(&db, &id)?.ok_or("Assistant not found")?;
     let slug = crate::bundle::slug(&a.name);
     let dest = std::path::PathBuf::from(dest.trim());
     if dest.as_os_str().is_empty() {
-        return Err("Choisissez un dossier de destination.".into());
+        return Err("Pick a destination folder.".into());
     }
     let progress = move |stage: &str, done: u64, total: u64| {
         let _ = app.emit(
@@ -749,7 +750,7 @@ fn delete_assistant(state: State<AppState>, id: String) -> Res<()> {
 #[tauri::command]
 fn set_active_assistant(state: State<AppState>, id: String) -> Res<()> {
     if !id.is_empty() && crate::assistant::get(&state.db, &id)?.is_none() {
-        return Err("Assistant introuvable".into());
+        return Err("Assistant not found".into());
     }
     let mut s = state.db.settings()?;
     s.active_assistant = id;
@@ -765,7 +766,7 @@ fn messages(state: State<AppState>, id: String) -> Res<Vec<Value>> {
 #[tauri::command]
 fn feedback(state: State<AppState>, id: String, value: i64) -> Res<()> {
     if value != 1 && value != -1 {
-        return Err("Note invalide".into());
+        return Err("Invalid rating".into());
     }
     state
         .db
@@ -843,7 +844,7 @@ async fn search_sources(state: State<'_, AppState>, query: String, mode: String)
 #[tauri::command]
 fn add_evaluation(state: State<AppState>, question: String, expected_document: String) -> Res<()> {
     if question.trim().is_empty() {
-        return Err("Question vide".into());
+        return Err("Empty question".into());
     }
     let c = state.db.conn()?;
     let n: i64 = c
@@ -990,6 +991,27 @@ async fn pull_model(app: tauri::AppHandle, state: State<'_, AppState>, model: St
         return Err("Invalid model name".into());
     }
     let s = state.db.settings()?;
+    // Curated tags for an embedded role go to the GGUF cache, no Ollama needed.
+    let wants_chat_gguf =
+        s.provider == crate::llm::EMBEDDED && crate::llm::chat_model(&model).is_some();
+    let wants_embed_gguf = s.embedding_endpoint.trim() == crate::llm::EMBEDDED
+        && crate::llm::EMBED_MODELS
+            .iter()
+            .any(|m| m.tag == model.trim());
+    if wants_chat_gguf || wants_embed_gguf {
+        let progress = |label: &str, done: u64, total: u64| {
+            let _ = app.emit(
+                "model-progress",
+                json!({"status": label, "completed": done, "total": total}),
+            );
+        };
+        if wants_chat_gguf {
+            crate::bundle::cached_chat_gguf(&state.db, &model, &progress).await?;
+        } else {
+            crate::bundle::cached_embed_gguf(&state.db, &model, &progress).await?;
+        }
+        return Ok(());
+    }
     let base = crate::llm::local_endpoint(&s.embedding_endpoint)?;
     let resp = crate::llm::client()?
         .post(format!("{base}/api/pull"))
@@ -1067,6 +1089,8 @@ pub fn run() {
             .build()?;
             let db = Db::new(&app.path().app_data_dir()?).map_err(std::io::Error::other)?;
             let mut s = db.settings().map_err(std::io::Error::other)?;
+            crate::engine::set_cache_dir(crate::bundle::gguf_cache_dir(&db));
+            crate::engine::set_idle_secs(s.engine_idle_minutes * 60);
             if s.whisper_model.is_empty() {
                 s.whisper_model = db.root.join("models/ggml-base.bin").display().to_string();
                 db.set_settings(&s).map_err(std::io::Error::other)?;

@@ -28,7 +28,7 @@ pub async fn answer(
         return Err("The question must hold between 1 and 12,000 characters.".into());
     }
     if !MODES.contains(&mode) {
-        return Err("Mode de recherche invalide".into());
+        return Err("Invalid search mode".into());
     }
     let start = Instant::now();
     let result = run(
@@ -235,7 +235,9 @@ fn over_budget(db: &Db, a: &Assistant, conversation_id: &str) -> Res<Option<Stri
             )
             .map_err(err)?;
         if estimate_tokens(chars) >= a.max_conversation_tokens {
-            return Ok(Some("Cette conversation a atteint sa limite. Ouvrez une nouvelle conversation pour continuer.".into()));
+            return Ok(Some(
+                "This conversation has reached its limit. Open a new one to continue.".into(),
+            ));
         }
     }
     if a.daily_token_budget > 0 {
@@ -286,15 +288,15 @@ mod tests {
         let conv = new_conversation(&db, Some(&a.id)).unwrap();
         assert!(
             over_budget(&db, &a, &conv).unwrap().is_none(),
-            "conversation vide"
+            "empty conversation"
         );
         db.conn().unwrap().execute("INSERT INTO messages(id,conversation_id,role,content,created)VALUES('m1',?1,'user',?2,?3)", params![conv, "x".repeat(44), now()]).unwrap();
         assert!(
             over_budget(&db, &a, &conv)
                 .unwrap()
                 .unwrap()
-                .contains("limite"),
-            "44 caracteres ≈ 11 tokens > 10"
+                .contains("limit"),
+            "44 characters ≈ 11 tokens > 10"
         );
         a.max_conversation_tokens = 0;
         a.daily_token_budget = 20;

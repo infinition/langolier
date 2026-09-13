@@ -3,8 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH"
 
-# Start the Ollama daemon only when nothing answers yet (Ollama.app counts).
-if command -v ollama >/dev/null 2>&1; then
+# Start Ollama only if the settings actually use it, and nothing answers yet.
+db="$HOME/Library/Application Support/local.langolier.studio/langolier.sqlite3"
+uses_ollama=$(sqlite3 "$db" "SELECT json_extract(value,'\$.provider')='ollama' OR json_extract(value,'\$.embedding_endpoint') LIKE 'http%' FROM settings WHERE id=1" 2>/dev/null || echo 0)
+if [ "$uses_ollama" = "1" ] && command -v ollama >/dev/null 2>&1; then
   if ! curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     nohup ollama serve > /tmp/langolier-ollama.log 2>&1 &
   fi

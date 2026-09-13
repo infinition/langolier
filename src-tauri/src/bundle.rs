@@ -133,10 +133,10 @@ pub fn validate(path: &Path) -> Res<Assistant> {
         .map_err(err)?;
     let n: i64 = c
         .query_row("SELECT count(*) FROM assistants", [], |r| r.get(0))
-        .map_err(|_| "Ce fichier n'est pas un bundle Langolier.".to_string())?;
+        .map_err(|_| "This file is not a Langolier bundle.".to_string())?;
     if n != 1 {
         return Err(format!(
-            "Le bundle doit contenir un seul profil, il en contient {n}."
+            "A bundle must hold exactly one profile, this one holds {n}."
         ));
     }
     let raw: String = c
@@ -572,49 +572,11 @@ fn write_app(dir: &Path, display: &str, mode: &str, slug: &str, avatar: &str) ->
     Ok(app)
 }
 pub const LIGHT_CHAT_MODEL: &str = "qwen3:4b-instruct";
-/// Has the local Ollama server pull a model.
-async fn pull_ollama(
-    endpoint: &str,
-    model: &str,
-    progress: &(dyn Fn(&str, u64, u64) + Sync),
-) -> Res<()> {
-    let base = crate::llm::local_endpoint(endpoint)?;
-    progress(&format!("Downloading {model} through Ollama"), 0, 0);
-    let client = reqwest::Client::builder().build().map_err(err)?;
-    let mut resp = client
-        .post(format!("{base}/api/pull"))
-        .json(&serde_json::json!({"model": model, "stream": true}))
-        .timeout(std::time::Duration::from_secs(3 * 3600))
-        .send()
-        .await
-        .map_err(|e| format!("Ollama unreachable while downloading {model}: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Ollama refused to download {model}: {}",
-            resp.status()
-        ));
-    }
-    let mut buf = Vec::new();
-    while let Some(chunk) = resp.chunk().await.map_err(err)? {
-        buf.extend_from_slice(&chunk);
-        while let Some(pos) = buf.iter().position(|b| *b == b'\n') {
-            let line: Vec<u8> = buf.drain(..=pos).collect();
-            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&line) {
-                if let Some(e) = v["error"].as_str() {
-                    return Err(format!("Downloading {model}: {e}"));
-                }
-                if let (Some(done), Some(total)) = (v["completed"].as_u64(), v["total"].as_u64()) {
-                    progress(&format!("Downloading {model} through Ollama"), done, total);
-                }
-            }
-        }
-    }
-    ollama_gguf(model).map(|_| ())
-}
+/// GGUF of an Ollama model, found in its blob store.
 pub fn ollama_gguf(name: &str) -> Res<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "HOME introuvable")?;
+        .map_err(|_| "HOME not set")?;
     let root = std::env::var("OLLAMA_MODELS")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(home).join(".ollama/models"));
@@ -652,12 +614,67 @@ pub async fn cached_embed_gguf(
     progress: &(dyn Fn(&str, u64, u64) + Sync),
 ) -> Res<PathBuf> {
     let spec = crate::llm::embed_model(tag);
-    let dir = db.root.join("gguf");
+    cached_gguf(
+        db,
+        spec.gguf_url,
+        spec.gguf_file,
+        "Downloading the embedding model",
+        100_000_000,
+        progress,
+    )
+    .await
+}
+/// Chat GGUF of a curated tag, downloaded once into the app cache.
+pub async fn cached_chat_gguf(
+    db: &Db,
+    tag: &str,
+    progress: &(dyn Fn(&str, u64, u64) + Sync),
+) -> Res<PathBuf> {
+    let spec = crate::llm::chat_model(tag).ok_or_else(|| format!("No downloadable GGUF is known for {tag}. Pick one of the curated models or point to a GGUF file."))?;
+    // Ollama already has the weights? Link them in instead of downloading again.
+    let target = gguf_cache_dir(db).join(spec.gguf_file);
+    if !target.is_file() {
+        if let Ok(blob) = ollama_gguf(tag) {
+            std::fs::create_dir_all(gguf_cache_dir(db)).map_err(err)?;
+            if std::fs::hard_link(&blob, &target).is_err() {
+                copy_with_progress(
+                    &blob,
+                    &target,
+                    "Copying the chat model from Ollama",
+                    progress,
+                )?;
+            }
+            return Ok(target);
+        }
+    }
+    cached_gguf(
+        db,
+        spec.gguf_url,
+        spec.gguf_file,
+        "Downloading the chat model",
+        spec.bytes / 2,
+        progress,
+    )
+    .await
+}
+pub fn gguf_cache_dir(db: &Db) -> PathBuf {
+    db.root.join("gguf")
+}
+/// Downloads a GGUF into the app cache once; a partial file is redone.
+async fn cached_gguf(
+    db: &Db,
+    url: &str,
+    file: &str,
+    label: &str,
+    min_bytes: u64,
+    progress: &(dyn Fn(&str, u64, u64) + Sync),
+) -> Res<PathBuf> {
+    let dir = gguf_cache_dir(db);
     std::fs::create_dir_all(&dir).map_err(err)?;
-    let target = dir.join(spec.gguf_file);
+    let target = dir.join(file);
     if target.is_file()
         && std::fs::metadata(&target)
-            .map(|m| m.len() > 100_000_000)
+            .map(|m| m.len() > min_bytes)
             .unwrap_or(false)
     {
         return Ok(target);
@@ -667,34 +684,32 @@ pub async fn cached_embed_gguf(
         .build()
         .map_err(err)?;
     let resp = client
-        .get(spec.gguf_url)
+        .get(url)
         .send()
         .await
-        .map_err(|e| format!("Downloading {}: {e}", spec.gguf_file))?;
+        .map_err(|e| format!("Downloading {file}: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!(
-            "Download of {} refused: {}",
-            spec.gguf_file,
-            resp.status()
-        ));
+        return Err(format!("Download of {file} refused: {}", resp.status()));
     }
     let total = resp.content_length().unwrap_or(0);
-    let tmp = dir.join(format!("{}.part", spec.gguf_file));
-    let mut file = std::fs::File::create(&tmp).map_err(err)?;
+    let tmp = dir.join(format!("{file}.part"));
+    let mut out = std::fs::File::create(&tmp).map_err(err)?;
     let mut stream = resp.bytes_stream();
     let mut done = 0u64;
     use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(err)?;
-        file.write_all(&chunk).map_err(err)?;
+        out.write_all(&chunk).map_err(err)?;
         done += chunk.len() as u64;
-        progress("Downloading the embedding model", done, total);
+        progress(label, done, total);
     }
-    drop(file);
-    if std::fs::read(&tmp)
-        .map(|b| b.len() < 4 || &b[..4] != b"GGUF")
-        .unwrap_or(true)
-    {
+    drop(out);
+    let mut head = [0u8; 4];
+    let ok = std::fs::File::open(&tmp)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .map(|_| &head == b"GGUF")
+        .unwrap_or(false);
+    if !ok {
         let _ = std::fs::remove_file(&tmp);
         return Err("The downloaded file is not a GGUF.".into());
     }
@@ -787,17 +802,21 @@ pub async fn write_kit(
         std::fs::create_dir_all(&models_dir).map_err(err)?;
         let mut s = effective.clone();
         if engine == "embedded-light" {
-            s.provider = "ollama".into();
+            s.provider = crate::llm::EMBEDDED.into();
             s.model = LIGHT_CHAT_MODEL.into();
-            if ollama_gguf(&s.model).is_err() {
-                pull_ollama(&effective.embedding_endpoint, &s.model, progress).await?;
-            }
         }
         if !crate::llm::is_cloud(&s.provider) {
-            let src = if s.provider == crate::llm::EMBEDDED {
-                crate::engine::resolve(&s.model)?
-            } else {
-                ollama_gguf(&s.model)?
+            // Ollama's blob when it has one, else the curated GGUF from the cache.
+            let src = match ollama_gguf(&s.model) {
+                Ok(p) if s.provider != crate::llm::EMBEDDED => p,
+                _ => {
+                    let resolved = crate::engine::resolve(&s.model)?;
+                    if resolved.is_file() {
+                        resolved
+                    } else {
+                        cached_chat_gguf(db, &s.model, progress).await?
+                    }
+                }
             };
             let dst = models_dir.join("chat.gguf");
             copy_with_progress(&src, &dst, "Copying the chat model", progress)?;
@@ -1249,7 +1268,7 @@ mod kit_tests {
         assert_eq!(
             (n, keyed),
             (3, 3),
-            "tous les passages revectorises avec la cle embarquee"
+            "every passage re-vectorised with the embedded key"
         );
         assert_eq!(r["reembedded"], json!(3));
         crate::engine::shutdown();
@@ -1271,7 +1290,7 @@ mod export_tests {
             .unwrap()
             .into_iter()
             .find(|a| a.name == name)
-            .expect("profil introuvable");
+            .expect("profile not found");
         let rt = tokio::runtime::Runtime::new().unwrap();
         let progress = |stage: &str, done: u64, total: u64| eprintln!("  {stage} {done}/{total}");
         let r = rt

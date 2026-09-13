@@ -302,7 +302,7 @@ pub fn remove(db: &Db, id: &str) -> Res<()> {
         .execute("DELETE FROM assistants WHERE id=?1", [id])
         .map_err(err)?;
     if n == 0 {
-        return Err("Assistant introuvable".into());
+        return Err("Assistant not found".into());
     }
     Ok(())
 }

@@ -42,18 +42,23 @@ pub struct Settings {
     /// Active assistant profile; empty means bare Langolier.
     pub active_assistant: String,
     pub ingestion_paused: bool,
+    /// Minutes before the embedded engine unloads idle models; 0 keeps them.
+    pub engine_idle_minutes: u64,
 }
+use crate::llm::EMBEDDED;
 pub const SHORTCUT: &str = "CommandOrControl+Shift+Space";
-pub const ABSTAIN: &str = "Je n’ai pas cette information.";
-/// Former abstention text, replaced on start unless customised.
-pub const ABSTAIN_LEGACY: &str = "I do not find that information in the indexed sources.";
+pub const ABSTAIN: &str = "I do not have that information.";
+/// The first French default named the retrieval machinery and the model
+/// echoed it; it is replaced on start by its neutral French successor.
+pub const ABSTAIN_LEGACY: &str = "Je ne trouve pas cette information dans les sources indexées.";
+pub const ABSTAIN_FR: &str = "Je n’ai pas cette information.";
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            provider: "ollama".into(),
+            provider: EMBEDDED.into(),
             endpoint: "http://127.0.0.1:11434".into(),
-            model: "qwen3:8b".into(),
-            embedding_endpoint: "http://127.0.0.1:11434".into(),
+            model: "qwen3:4b-instruct".into(),
+            embedding_endpoint: EMBEDDED.into(),
             embedding_model: "embeddinggemma".into(),
             whisper_model: String::new(),
             top_k: 6,
@@ -74,6 +79,7 @@ impl Default for Settings {
             watch_interval: 30,
             active_assistant: String::new(),
             ingestion_paused: false,
+            engine_idle_minutes: 5,
         }
     }
 }
@@ -111,7 +117,7 @@ impl Db {
         drop(c);
         let mut s = db.settings()?;
         if s.abstain_text.trim() == ABSTAIN_LEGACY {
-            s.abstain_text = ABSTAIN.into();
+            s.abstain_text = ABSTAIN_FR.into();
             db.set_settings(&s)?;
         }
         Ok(db)

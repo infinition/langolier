@@ -230,7 +230,7 @@ export default function EngineSettings({
           )}
           <label>
             {s.provider === "embedded"
-              ? t("GGUF file for the chat model")
+              ? t("Chat model (curated tag, or path to a GGUF file)")
               : t("Chat model")}
             <input
               list="installed-models"
@@ -238,14 +238,23 @@ export default function EngineSettings({
               onChange={(e) => field("model", e.target.value)}
             />
             <datalist id="installed-models">
-              {(health?.models?.length
-                ? health.models.map((m) => m.name)
-                : provider?.models || []
+              {(s.provider === "embedded"
+                ? CHAT_MODELS.map((m) => m.tag)
+                : health?.models?.length
+                  ? health.models.map((m) => m.name)
+                  : provider?.models || []
               ).map((name) => (
                 <option key={name} value={name} />
               ))}
             </datalist>
           </label>
+          {s.provider === "embedded" && (
+            <p className="field-help">
+              {t(
+                "A curated tag is downloaded once into the app cache with the button below, then loaded on demand. llama.cpp runs inside Langolier: nothing to install, nothing listening on a port.",
+              )}
+            </p>
+          )}
           {provider?.cloud && (
             <div className="setting-note">
               <CircleAlert size={16} />
@@ -292,6 +301,29 @@ export default function EngineSettings({
               onChange={(e) => field("max_tokens", Number(e.target.value))}
             />
           </label>
+          {(s.provider === "embedded" ||
+            s.embedding_endpoint.trim() === "embedded") && (
+            <label>
+              {t("Unload idle models after (minutes, 0 = never)")}
+              <input
+                type="number"
+                min="0"
+                max="1440"
+                value={s.engine_idle_minutes}
+                onChange={(e) =>
+                  field(
+                    "engine_idle_minutes",
+                    Math.max(0, Number(e.target.value)),
+                  )
+                }
+              />
+              <small className="muted">
+                {t(
+                  "Memory is released when the engine has not been used for this long, and the next question reloads the model in a few seconds.",
+                )}
+              </small>
+            </label>
+          )}
           <p className="field-help">
             {CHAT_MODELS.map((m) => (
               <span key={m.tag}>
@@ -328,12 +360,20 @@ export default function EngineSettings({
           </label>
           {s.embedding_endpoint.trim() === "embedded" ? (
             <label>
-              {t("GGUF file for the embedding model")}
+              {t("Embedding model (curated tag, or path to a GGUF file)")}
               <input
+                list="embed-tags"
                 value={s.embedding_model}
                 onChange={(e) => field("embedding_model", e.target.value)}
-                placeholder="/chemin/vers/embeddinggemma-300M-Q8_0.gguf"
+                placeholder="embeddinggemma"
               />
+              <datalist id="embed-tags">
+                {embedModels.map((m) => (
+                  <option key={m.tag} value={m.tag}>
+                    {m.label}
+                  </option>
+                ))}
+              </datalist>
             </label>
           ) : (
             <label>
@@ -354,7 +394,9 @@ export default function EngineSettings({
                     {m.label} · {m.dims} dim.
                   </option>
                 ))}
-                <option value="__other">Autre ({s.embedding_model})</option>
+                <option value="__other">
+                  {t("Other")} ({s.embedding_model})
+                </option>
               </select>
               <small className="muted">
                 {t(
@@ -604,7 +646,14 @@ export default function EngineSettings({
           <div>
             <h3>{t("A new model, in one click")}</h3>
             <p>
-              {t("Downloaded by the Ollama server configured for embeddings")}
+              {s.provider === "embedded" ||
+              s.embedding_endpoint.trim() === "embedded"
+                ? t(
+                    "Curated tags land in the app cache; other names go through Ollama",
+                  )
+                : t(
+                    "Downloaded by the Ollama server configured for embeddings",
+                  )}
             </p>
           </div>
           <Download size={20} />
