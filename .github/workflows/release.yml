@@ -104,6 +104,6 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          body_path: docs/releases/v0.1.0.md
+          body_path: docs/releases/v0.2.0.md
           files: release-assets/*
           fail_on_unmatched_files: true

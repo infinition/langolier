@@ -559,7 +559,7 @@ export default function App() {
                   ? t("{size} of unified memory / RAM", {
                       size: bytes(health.memory_total),
                     })
-                  : "Rust + Tauri · v0.1.0"}
+                  : "Rust + Tauri · v0.2.0"}
               </span>
             </div>
             <ChevronRight size={14} />
