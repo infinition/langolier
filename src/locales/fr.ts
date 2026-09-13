@@ -867,4 +867,8 @@ export const FR: Record<string, string> = {
   "Starts hidden at login, so the palette is always one shortcut away.":
     "Démarre réduit à l’ouverture de session : la palette est toujours à un raccourci.",
   "Go on…": "Poursuivez…",
+  "Copy the answer": "Copier la réponse",
+  Copy: "Copier",
+  Copied: "Copié",
+  "Copy failed": "Copie impossible",
 };

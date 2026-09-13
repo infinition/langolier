@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { CopyButton } from "../components/Common";
 import { listen } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -170,6 +171,7 @@ export default function Palette() {
                   <p className="palette-error">{t.error}</p>
                 ) : t.answer ? (
                   <div className="palette-answer">
+                    {t.done && <CopyButton text={t.answer} />}
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {t.answer}
                     </ReactMarkdown>

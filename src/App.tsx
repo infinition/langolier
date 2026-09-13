@@ -1,10 +1,11 @@
 import {
-  Logo,
   Button,
+  CopyButton,
   Empty,
+  Logo,
   Modal,
-  SourceButton,
   PageHeading,
+  SourceButton,
 } from "./components/Common";
 import { t, useLang } from "./i18n";
 import ImportModal from "./components/ImportModal";
@@ -740,6 +741,9 @@ export default function App() {
                       <div className="message-label">
                         {m.role === "assistant" ? "Langolier" : t("You")}
                       </div>
+                      {m.role === "assistant" && m.content && (
+                        <CopyButton text={m.content} />
+                      )}
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         components={{

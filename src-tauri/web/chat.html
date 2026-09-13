@@ -80,6 +80,20 @@
   button:disabled { opacity: .5; cursor: default; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 12px; font-weight: 500; font-size: 13px; }
   .error { color: #d9534f; }
+  .msg.assistant .bubble { position: relative; }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 8px; font: inherit; font-size: 10.5px; letter-spacing: .3px; border-radius: 7px;
+    color: var(--muted); background: rgba(127,127,127,.12); border: 1px solid var(--line);
+    opacity: 0; transform: translateY(-2px); cursor: pointer; z-index: 2;
+    transition: opacity .18s, transform .18s, color .15s;
+  }
+  .copy-btn svg { width: 12px; height: 12px; }
+  .msg.assistant:hover .copy-btn, .copy-btn.done, .copy-btn.failed { opacity: 1; transform: none; transition-delay: 1s; }
+  .copy-btn.done, .copy-btn.failed { transition-delay: 0s; }
+  .copy-btn.done { color: var(--accent); border-color: var(--accent); animation: copy-pop .35s cubic-bezier(.2,.9,.3,1.4); }
+  .copy-btn.failed { color: #d9534f; }
+  @keyframes copy-pop { 40% { transform: scale(1.18); } }
   .hint { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin: 8px 0 0; }
   .gear { display: none; background: none; border: 0; padding: 0 4px; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; }
   .gear:hover { opacity: 1; }
@@ -188,6 +202,7 @@
   const STRINGS = (fr) => fr ? {
     new: "Nouvelle conversation", ask: "Posez votre question…", send: "Envoyer", connecting: "Connexion…",
     error: "Erreur", none: "Aucune réponse reçue.", configFailed: "Impossible de charger la configuration : ",
+    copy: "Copier", copied: "Copié", copyFailed: "Copie impossible", copyTitle: "Copier la réponse",
     grounded: "Réponses fondées uniquement sur les connaissances de cet assistant.",
     cited: " Les sources citées apparaissent sous chaque réponse.",
     adminTitle: "Administration", adminIntro: "Remplacer le cerveau de cet assistant par un autre fichier .langolier, ou revenir à une version précédente. Les conversations sont conservées.",
@@ -201,6 +216,7 @@
   } : {
     new: "New conversation", ask: "Ask your question…", send: "Send", connecting: "Connecting…",
     error: "Error", none: "No answer received.", configFailed: "Could not load the configuration: ",
+    copy: "Copy", copied: "Copied", copyFailed: "Copy failed", copyTitle: "Copy the answer",
     grounded: "Answers grounded only in this assistant's knowledge.",
     cited: " Cited sources appear under each answer.",
     adminTitle: "Administration", adminIntro: "Replace this assistant's brain with another .langolier file, or go back to an earlier version. Conversations are kept.",
@@ -307,9 +323,34 @@
     b.className = "bubble";
     b.innerHTML = render(content || "");
     if (config.show_sources !== false && sources && sources.length) b.appendChild(sourcesNode(sources));
+    if (role === "assistant" && content) b.appendChild(copyNode(() => content));
     msg.appendChild(b);
     thread.appendChild(msg);
     scroll();
+    return b;
+  }
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (e) {
+      const area = document.createElement("textarea"); area.value = text; area.setAttribute("readonly", "");
+      area.style.position = "fixed"; area.style.opacity = "0"; document.body.appendChild(area); area.select();
+      const ok = document.execCommand("copy"); area.remove(); return ok;
+    }
+  }
+  // Copy button on an answer: shown on hover after a beat, pops on click.
+  function copyNode(getText) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "copy-btn"; b.title = T.copyTitle;
+    b.innerHTML = `${COPY_ICON}<span>${T.copy}</span>`;
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ok = await copyText(getText());
+      b.className = "copy-btn " + (ok ? "done" : "failed");
+      b.innerHTML = `${ok ? CHECK_ICON : COPY_ICON}<span>${ok ? T.copied : T.copyFailed}</span>`;
+      setTimeout(() => { b.className = "copy-btn"; b.innerHTML = `${COPY_ICON}<span>${T.copy}</span>`; }, 1600);
+    });
     return b;
   }
   function sourcesNode(sources) {
@@ -382,7 +423,7 @@
           if (ev === "conversation") { conversation = payload.id; localStorage.setItem(CONV_KEY, conversation); }
           else if (ev === "phase") phase.textContent = fromServer(payload);
           else if (ev === "token") { answer += payload; bubble.innerHTML = render(answer); bubble.appendChild(caret); scroll(); }
-          else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); }
+          else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); if (payload.content) bubble.appendChild(copyNode(() => payload.content)); }
           else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(fromServer(payload.error) || T.error)}</span>`; }
         }
       }

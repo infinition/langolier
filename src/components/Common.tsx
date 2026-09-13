@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { t } from "../i18n";
-import { Library, X, FileText, ArrowUpRight } from "lucide-react";
+import { Library, X, FileText, ArrowUpRight, Copy, Check } from "lucide-react";
 import type { Source } from "../types";
 export function Logo({ small = false }: { small?: boolean }) {
   return (
@@ -138,5 +138,56 @@ export function PageHeading({
       </div>
       {action}
     </div>
+  );
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Webviews without the async clipboard: the old selection trick.
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+// Copy button for an answer: shown on hover after a beat, pops on click.
+export function CopyButton({
+  text,
+  className = "",
+}: {
+  text: string;
+  className?: string;
+}) {
+  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
+  return (
+    <button
+      type="button"
+      className={`copy-btn ${state} ${className}`}
+      title={t("Copy the answer")}
+      aria-label={t("Copy the answer")}
+      onClick={async (e) => {
+        e.stopPropagation();
+        setState((await copyText(text)) ? "done" : "failed");
+        setTimeout(() => setState("idle"), 1600);
+      }}
+    >
+      {state === "done" ? <Check size={13} /> : <Copy size={13} />}
+      <span>
+        {state === "done"
+          ? t("Copied")
+          : state === "failed"
+            ? t("Copy failed")
+            : t("Copy")}
+      </span>
+    </button>
   );
 }

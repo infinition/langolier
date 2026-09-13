@@ -3768,3 +3768,79 @@ mark.current {
   border-color: #5c4732;
   background: #211c17;
 }
+
+/* ------------------------------------------------------------ copy button */
+.message,
+.palette-bubble {
+  position: relative;
+}
+.copy-btn {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.18s,
+    transform 0.18s,
+    color 0.15s,
+    border-color 0.15s;
+  cursor: pointer;
+  z-index: 2;
+}
+.copy-btn:hover {
+  color: var(--cream);
+  border-color: #46464a;
+}
+/* Shown after a beat on hover, gone at once when the pointer leaves. */
+.message:hover .copy-btn,
+.palette-bubble:hover .copy-btn,
+.copy-btn:focus-visible,
+.copy-btn.done,
+.copy-btn.failed {
+  opacity: 1;
+  transform: none;
+  transition-delay: 1s;
+}
+.copy-btn.done,
+.copy-btn.failed,
+.copy-btn:focus-visible {
+  transition-delay: 0s;
+}
+.copy-btn.done {
+  color: var(--lime);
+  border-color: #5c4732;
+  background: #211c17;
+  animation: copy-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+.copy-btn.failed {
+  color: var(--danger);
+  border-color: #5a3a35;
+}
+@keyframes copy-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.palette-bubble .copy-btn {
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
