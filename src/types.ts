@@ -41,6 +41,11 @@ export interface Assistant {
   daily_token_budget: number;
   telegram_token: string;
   telegram_allowed: string;
+  admin_enabled: boolean;
+  admin_secret: string;
+  admin_secret_set: boolean;
+  admin_import: boolean;
+  admin_restore: boolean;
   created: number;
 }
 export interface EmbedModel {

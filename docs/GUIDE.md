@@ -159,6 +159,33 @@ Launchers are platform specific, the bundle is universal. Build launchers for ot
 
 An exported cloud profile carries its API key inside the bundle in clear text. Treat that file as a secret.
 
+## Remote administration
+
+An exported chatbot can be updated from its own page, for hosts where dropping a file is impractical: a NAS, a VPS, a Docker volume mounted read only.
+
+Turn it on in the profile before exporting: **Remote administration**, a secret of at least 12 characters (the Generate button makes one), and two switches for import and restore. The secret is stored as a SHA-256 hash, both in the app and in the bundle; it is shown once.
+
+On the chat page a small gear appears in the footer. With the secret:
+
+- **Import** uploads a `.langolier` and installs it. A bundle that needs an embedding model absent from the host is refused with the reason; the page offers to continue with word search only.
+- **Restore** lists every bundle the chatbot ever ran, named, timestamped and sized, marks the running one and the one the kit shipped with, and installs the selected one.
+- **Delete** removes a stored version. The running one and the kit's own bundle cannot be deleted.
+
+Rules worth knowing:
+
+- Every install, whether by file drop, import or restore, lands in `<state>/bundles/`. The store keeps twenty entries, deduplicated by content, and never prunes the running one or the kit's.
+- Newest wins. A file dropped in the bundle folder after an import is picked up on the next 20 second check, exactly as before.
+- Conversations are kept across imports and restores. Telegram chats bound to an assistant that is no longer present start over.
+- Administration belongs to the deployment, not to the content. Importing or restoring a bundle exported without administration does not lock you out; a bundle that brings its own secret replaces the current one, which is how a secret gets rotated.
+- Five wrong secrets pause the admin routes for fifteen minutes. When administration is off, the routes do not exist.
+- Uploads stream to disk with a 1 GB cap. The secret travels in a header, never in the URL, and is kept in the tab's session storage only.
+
+There is deliberately no export: nothing leaves the server through the page.
+
+Endpoints, all under the `X-Admin-Token` header: `GET /api/admin/bundles`, `POST /api/admin/import` (raw body, `?force=1` to accept a degraded embedder), `POST /api/admin/restore` and `POST /api/admin/delete` (JSON `{"id"}`).
+
+For tests or a second instance, `LANGOLIER_DISABLE_TELEGRAM=1` keeps the server from polling the bot.
+
 ## Server mode
 
 The same binary serves the chat page without a desktop environment.

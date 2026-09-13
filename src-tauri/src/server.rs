@@ -72,17 +72,28 @@ pub fn parse_args(argv: &[String]) -> Option<Args> {
 }
 struct App {
     db: Db,
+    data_dir: PathBuf,
     swap: RwLock<()>,
     /// One generation at a time, web page and Telegram bridge together.
     generation_shared: Arc<Mutex<()>>,
+    lockout: Mutex<Lockout>,
 }
+/// Wrong admin secrets: five strikes, then a fifteen minute pause.
+#[derive(Default)]
+struct Lockout {
+    failures: u32,
+    until: Option<std::time::Instant>,
+}
+const LOCKOUT_STRIKES: u32 = 5;
+const LOCKOUT_PAUSE: Duration = Duration::from_secs(15 * 60);
+const IMPORT_MAX: u64 = 1 << 30;
 pub fn main(args: Args) -> i32 {
     if args.gui {
         #[cfg(feature = "desktop")]
         return gui(args);
         #[cfg(not(feature = "desktop"))]
         {
-            eprintln!("Ce binaire est un serveur sans interface : utilisez --serve.");
+            eprintln!("This binary is a headless server: use --serve.");
             return 2;
         }
     }
@@ -90,7 +101,7 @@ pub fn main(args: Args) -> i32 {
     let code = match rt.block_on(serve(args)) {
         Ok(()) => 0,
         Err(e) => {
-            eprintln!("Erreur : {e}");
+            eprintln!("Error: {e}");
             1
         }
     };
@@ -115,7 +126,7 @@ fn gui(mut args: Args) -> i32 {
     let (url, name) = match rx.recv() {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
-            eprintln!("Erreur : {e}");
+            eprintln!("Error: {e}");
             return 1;
         }
         Err(_) => {
@@ -156,9 +167,10 @@ pub async fn serve_with(
     let data_dir = match args.data {
         Some(d) => d,
         None => {
-            let cands = bundle::candidates(&exe_dir)?;
+            let cands = bundle::candidates(&exe_dir, None)?;
             let slug = match cands.last() {
-                Some((_, bytes)) => {
+                Some(c) => {
+                    let bytes = bundle::read_candidate(c)?;
                     let tmp = std::env::temp_dir()
                         .join(format!("langolier-probe-{}.langolier", std::process::id()));
                     std::fs::write(&tmp, bytes).map_err(err)?;
@@ -187,13 +199,13 @@ pub async fn serve_with(
     let s = db.settings()?;
     let profile = assistant::get(&db, &s.active_assistant)?;
     println!(
-        "Assistant : {}",
+        "Assistant: {}",
         profile
             .as_ref()
             .map(|a| a.name.as_str())
-            .unwrap_or("(profil absent)")
+            .unwrap_or("(no profile)")
     );
-    println!("Moteur : {} · {}", s.provider, s.model);
+    println!("Engine: {} · {}", s.provider, s.model);
     if s.provider == "ollama"
         || (s.embedding_endpoint.trim() != llm::EMBEDDED && !llm::is_cloud(&s.provider))
     {
@@ -202,17 +214,28 @@ pub async fn serve_with(
     let shared = Arc::new(Mutex::new(()));
     let app = Arc::new(App {
         db,
+        data_dir: data_dir.clone(),
         swap: RwLock::new(()),
         generation_shared: shared,
+        lockout: Mutex::new(Lockout::default()),
     });
-    // Telegram bridge when the profile carries a token.
+    // Telegram bridge when the profile carries a token. LANGOLIER_DISABLE_TELEGRAM=1
+    // keeps a test or a second instance from stealing the bot's updates.
+    let telegram_off = std::env::var("LANGOLIER_DISABLE_TELEGRAM").is_ok_and(|v| v == "1");
     if profile
         .as_ref()
         .is_some_and(|a| !a.telegram_token.trim().is_empty())
     {
-        println!("Telegram : pont actif pour ce profil.");
+        println!(
+            "{}",
+            if telegram_off {
+                "Telegram: bridge disabled by LANGOLIER_DISABLE_TELEGRAM."
+            } else {
+                "Telegram: bridge active for this profile."
+            }
+        );
     }
-    {
+    if !telegram_off {
         let db = app.db.clone();
         let lock = app.generation_shared.clone();
         tokio::spawn(crate::telegram::poll(db, lock));
@@ -246,7 +269,7 @@ pub async fn serve_with(
         },
         port
     );
-    println!("Page de conversation : {url}");
+    println!("Chat page: {url}");
     ready(
         url.clone(),
         profile
@@ -423,14 +446,17 @@ struct Request {
     path: String,
     query: HashMap<String, String>,
     body: Vec<u8>,
+    length: u64,
+    admin_token: String,
 }
-async fn read_request(reader: &mut BufReader<TcpStream>) -> Res<Request> {
+async fn read_head(reader: &mut BufReader<TcpStream>) -> Res<Request> {
     let mut line = String::new();
     reader.read_line(&mut line).await.map_err(err)?;
     let mut parts = line.split_whitespace();
     let method = parts.next().unwrap_or("").to_string();
     let target = parts.next().unwrap_or("/").to_string();
-    let mut length = 0usize;
+    let mut length = 0u64;
+    let mut admin_token = String::new();
     loop {
         let mut h = String::new();
         reader.read_line(&mut h).await.map_err(err)?;
@@ -438,18 +464,15 @@ async fn read_request(reader: &mut BufReader<TcpStream>) -> Res<Request> {
         if h.is_empty() {
             break;
         }
-        if let Some(v) = h
-            .strip_prefix("Content-Length:")
-            .or_else(|| h.strip_prefix("content-length:"))
-        {
-            length = v.trim().parse().unwrap_or(0);
+        let Some((k, v)) = h.split_once(':') else {
+            continue;
+        };
+        match k.trim().to_ascii_lowercase().as_str() {
+            "content-length" => length = v.trim().parse().unwrap_or(0),
+            "x-admin-token" => admin_token = v.trim().to_string(),
+            _ => {}
         }
     }
-    if length > 2_000_000 {
-        return Err("Corps trop volumineux".into());
-    }
-    let mut body = vec![0u8; length];
-    reader.read_exact(&mut body).await.map_err(err)?;
     let (path, qs) = target.split_once('?').unwrap_or((&target, ""));
     let query = qs
         .split('&')
@@ -463,8 +486,47 @@ async fn read_request(reader: &mut BufReader<TcpStream>) -> Res<Request> {
         method,
         path: path.to_string(),
         query,
-        body,
+        body: Vec::new(),
+        length,
+        admin_token,
     })
+}
+async fn read_body(reader: &mut BufReader<TcpStream>, req: &mut Request) -> Res<()> {
+    if req.length > 2_000_000 {
+        return Err("Body too large".into());
+    }
+    let mut body = vec![0u8; req.length as usize];
+    reader.read_exact(&mut body).await.map_err(err)?;
+    req.body = body;
+    Ok(())
+}
+/// Streams a large body to disk instead of holding it in memory.
+async fn body_to_file(
+    reader: &mut BufReader<TcpStream>,
+    length: u64,
+    dest: &std::path::Path,
+) -> Res<()> {
+    if length == 0 || length > IMPORT_MAX {
+        return Err(format!(
+            "A bundle must be between 1 byte and {} MB.",
+            IMPORT_MAX >> 20
+        ));
+    }
+    let mut f = tokio::fs::File::create(dest).await.map_err(err)?;
+    let mut left = length;
+    let mut buf = vec![0u8; 1 << 16];
+    while left > 0 {
+        let n = reader
+            .read(&mut buf[..(left.min(1 << 16)) as usize])
+            .await
+            .map_err(err)?;
+        if n == 0 {
+            return Err("Upload cut short.".into());
+        }
+        f.write_all(&buf[..n]).await.map_err(err)?;
+        left -= n as u64;
+    }
+    f.flush().await.map_err(err)
 }
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
@@ -512,7 +574,11 @@ async fn json_err(w: &mut TcpStream, status: &str, msg: &str) -> Res<()> {
 }
 async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
     let mut reader = BufReader::new(stream);
-    let req = read_request(&mut reader).await?;
+    let mut req = read_head(&mut reader).await?;
+    if req.path.starts_with("/api/admin/") {
+        return admin(reader, req, app).await;
+    }
+    read_body(&mut reader, &mut req).await?;
     let mut w = reader.into_inner();
     let _r = app.swap.read().await;
     match (req.method.as_str(), req.path.as_str()) {
@@ -528,7 +594,7 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
         ("GET", "/api/config") => {
             let s = app.db.settings()?;
             let a = assistant::get(&app.db, &s.active_assistant)?.unwrap_or_default();
-            json_ok(&mut w, json!({"name": a.name, "welcome": a.welcome, "avatar": a.avatar, "theme": a.theme, "show_sources": a.show_sources})).await
+            json_ok(&mut w, json!({"name": a.name, "welcome": a.welcome, "avatar": a.avatar, "theme": a.theme, "show_sources": a.show_sources, "admin": {"enabled": a.admin_enabled, "import": a.admin_enabled && a.admin_import, "restore": a.admin_enabled && a.admin_restore}})).await
         }
         ("GET", "/api/health") => {
             let s = app.db.settings()?;
@@ -542,7 +608,7 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
         ("GET", "/api/messages") => {
             let id = req.query.get("id").cloned().unwrap_or_default();
             if !valid_id(&id) {
-                return json_err(&mut w, "400 Bad Request", "identifiant invalide").await;
+                return json_err(&mut w, "400 Bad Request", "invalid id").await;
             }
             // No SQLite connection may cross an await: it is not Send.
             let rows = {
@@ -561,8 +627,167 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
             json_ok(&mut w, Value::Array(rows)).await
         }
         ("POST", "/api/chat") => chat(&mut w, &req, &app).await,
-        _ => json_err(&mut w, "404 Not Found", "introuvable").await,
+        _ => json_err(&mut w, "404 Not Found", "not found").await,
     }
+}
+/// Remote administration of the running chatbot: import a bundle, list the
+/// store, restore or delete an entry. Everything needs the profile's secret;
+/// when administration is off the routes do not exist at all.
+async fn admin(mut reader: BufReader<TcpStream>, mut req: Request, app: Arc<App>) -> Res<()> {
+    let s = app.db.settings()?;
+    let a = assistant::get(&app.db, &s.active_assistant)?.unwrap_or_default();
+    if !a.admin_enabled {
+        let mut w = reader.into_inner();
+        return json_err(&mut w, "404 Not Found", "not found").await;
+    }
+    {
+        let mut lock = app.lockout.lock().await;
+        if let Some(until) = lock.until {
+            if std::time::Instant::now() < until {
+                let mut w = reader.into_inner();
+                return json_err(
+                    &mut w,
+                    "429 Too Many Requests",
+                    "Too many wrong secrets. Try again in a few minutes.",
+                )
+                .await;
+            }
+            lock.until = None;
+            lock.failures = 0;
+        }
+        if !assistant::admin_secret_matches(&a, &req.admin_token) {
+            lock.failures += 1;
+            if lock.failures >= LOCKOUT_STRIKES {
+                lock.until = Some(std::time::Instant::now() + LOCKOUT_PAUSE);
+                lock.failures = 0;
+            }
+            let mut w = reader.into_inner();
+            return json_err(&mut w, "401 Unauthorized", "Wrong secret.").await;
+        }
+        lock.failures = 0;
+    }
+    let is_import = req.method == "POST" && req.path == "/api/admin/import";
+    let staged = app
+        .data_dir
+        .join(format!("upload-{}.langolier", std::process::id()));
+    if is_import {
+        if !a.admin_import {
+            let mut w = reader.into_inner();
+            return json_err(
+                &mut w,
+                "403 Forbidden",
+                "Import is disabled for this chatbot.",
+            )
+            .await;
+        }
+        if let Err(e) = body_to_file(&mut reader, req.length, &staged).await {
+            let _ = std::fs::remove_file(&staged);
+            let mut w = reader.into_inner();
+            return json_err(&mut w, "400 Bad Request", &e).await;
+        }
+    } else {
+        read_body(&mut reader, &mut req).await?;
+    }
+    let mut w = reader.into_inner();
+    let entries = |app: &App| -> Res<Value> {
+        let list: Vec<Value> = bundle::store_entries(&app.data_dir)?
+            .into_iter()
+            .map(|e| json!({"id": e.id, "name": e.name, "size": e.size, "imported_at": e.modified, "active": e.active, "kit": e.kit}))
+            .collect();
+        Ok(json!({"bundles": list, "import": a.admin_import, "restore": a.admin_restore}))
+    };
+    let outcome: Res<Value> = match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/admin/bundles") => entries(&app),
+        ("POST", "/api/admin/import") => {
+            let bytes = std::fs::read(&staged).map_err(err)?;
+            let _ = std::fs::remove_file(&staged);
+            // Refuse a bundle whose embedder is missing here, unless forced:
+            // it would silently fall back to word search.
+            let forced = req.query.get("force").map(String::as_str) == Some("1");
+            let mut refusal = None;
+            if !forced {
+                if let Ok(candidate) = bundle_settings(&bytes) {
+                    let h = health(&candidate).await;
+                    if h["degraded"] == true {
+                        let why = h["problems"]
+                            .as_array()
+                            .map(|p| {
+                                p.iter()
+                                    .filter_map(Value::as_str)
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
+                            })
+                            .unwrap_or_default();
+                        refusal = Some(format!("This bundle needs an embedding model that is not available here: {why} Send again with force=1 to accept word search only."));
+                    }
+                }
+            }
+            match refusal {
+                Some(why) => Err(why),
+                None => {
+                    let name = {
+                        let _g = app.swap.write().await;
+                        bundle::store_import(&app.data_dir, &bytes)
+                    };
+                    name.and_then(|name| {
+                        println!("Imported from the page: {name}");
+                        Ok(json!({"name": name, "list": entries(&app)?}))
+                    })
+                }
+            }
+        }
+        ("POST", "/api/admin/restore") if !a.admin_restore => {
+            Err("Restore is disabled for this chatbot.".into())
+        }
+        ("POST", "/api/admin/delete") if !a.admin_restore => {
+            Err("Restore is disabled for this chatbot.".into())
+        }
+        ("POST", "/api/admin/restore") => {
+            let id = admin_id(&req)?;
+            let name = {
+                let _g = app.swap.write().await;
+                bundle::store_restore(&app.data_dir, &id)
+            };
+            name.and_then(|name| {
+                println!("Restored from the page: {name}");
+                Ok(json!({"name": name, "list": entries(&app)?}))
+            })
+        }
+        ("POST", "/api/admin/delete") => admin_id(&req)
+            .and_then(|id| bundle::store_delete(&app.data_dir, &id))
+            .and_then(|_| Ok(json!({"list": entries(&app)?}))),
+        _ => return json_err(&mut w, "404 Not Found", "not found").await,
+    };
+    match outcome {
+        Ok(v) => json_ok(&mut w, v).await,
+        Err(e) => json_err(&mut w, "400 Bad Request", &e).await,
+    }
+}
+fn admin_id(req: &Request) -> Res<String> {
+    let v: Value = serde_json::from_slice(&req.body)
+        .map_err(|_| "Expected a JSON body with an id.".to_string())?;
+    let id = v["id"].as_str().unwrap_or("").to_string();
+    if id.is_empty() || id.contains('/') || id.contains("..") || !id.ends_with(".langolier") {
+        return Err("Invalid bundle id.".into());
+    }
+    Ok(id)
+}
+/// Settings row of a bundle, to check it against this host before installing.
+fn bundle_settings(bytes: &[u8]) -> Res<crate::db::Settings> {
+    let tmp =
+        std::env::temp_dir().join(format!("langolier-check-{}.langolier", std::process::id()));
+    std::fs::write(&tmp, bytes).map_err(err)?;
+    let out = (|| {
+        let c =
+            rusqlite::Connection::open_with_flags(&tmp, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(err)?;
+        let raw: String = c
+            .query_row("SELECT value FROM settings WHERE id=1", [], |r| r.get(0))
+            .map_err(err)?;
+        serde_json::from_str(&raw).map_err(err)
+    })();
+    let _ = std::fs::remove_file(&tmp);
+    out
 }
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')

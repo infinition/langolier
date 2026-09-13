@@ -77,7 +77,8 @@ pub fn write_langolier_with(
         "DELETE FROM documents WHERE status!='ready';
          UPDATE documents SET watch_id=NULL;
          DELETE FROM conversations; DELETE FROM messages; DELETE FROM runs; DELETE FROM evaluations;
-         DELETE FROM watch_files; DELETE FROM watches;",
+         DELETE FROM watch_files; DELETE FROM watches;
+         DELETE FROM telegram_chats; DELETE FROM telegram_state; DELETE FROM api_keys;",
     )
     .map_err(err)?;
     c.execute("DELETE FROM assistants WHERE id!=?1", [&a.id])
@@ -160,12 +161,33 @@ pub fn install(bundle_bytes: &[u8], data_dir: &Path) -> Res<()> {
             .map_err(err)?;
         drop(c);
         let c = Connection::open(&staged).map_err(err)?;
+        crate::assistant::migrate(&c)?;
         c.execute("ATTACH DATABASE ?1 AS old", [live.to_string_lossy()])
             .map_err(err)?;
+        // Administration belongs to the deployment, not to the content: an
+        // incoming bundle only overrides it when it brings its own secret.
+        let old_has_admin: i64 = c
+            .query_row("SELECT count(*) FROM old.pragma_table_info('assistants') WHERE name='admin_secret'", [], |r| r.get(0))
+            .map_err(err)?;
+        if old_has_admin > 0 {
+            c.execute_batch(
+                "UPDATE assistants SET
+                   admin_enabled=(SELECT admin_enabled FROM old.assistants LIMIT 1),
+                   admin_secret=(SELECT admin_secret FROM old.assistants LIMIT 1),
+                   admin_import=(SELECT admin_import FROM old.assistants LIMIT 1),
+                   admin_restore=(SELECT admin_restore FROM old.assistants LIMIT 1)
+                 WHERE (admin_enabled=0 OR admin_secret='')
+                   AND (SELECT count(*) FROM old.assistants WHERE admin_secret!='')>0;",
+            )
+            .map_err(err)?;
+        }
         c.execute_batch(
             "INSERT OR IGNORE INTO conversations SELECT * FROM old.conversations;
              INSERT OR IGNORE INTO messages SELECT * FROM old.messages;
              INSERT OR IGNORE INTO runs SELECT * FROM old.runs;
+             INSERT OR IGNORE INTO telegram_chats SELECT * FROM old.telegram_chats;
+             INSERT OR IGNORE INTO telegram_state SELECT * FROM old.telegram_state;
+             DELETE FROM telegram_chats WHERE assistant_id NOT IN (SELECT id FROM assistants);
              DETACH DATABASE old;",
         )
         .map_err(err)?;
@@ -175,48 +197,246 @@ pub fn install(bundle_bytes: &[u8], data_dir: &Path) -> Res<()> {
         }
     }
     std::fs::rename(&staged, &live).map_err(err)?;
+    // A bundle written by an older version lacks newer columns: migrate now,
+    // not at the next start.
+    Db::new(data_dir)?;
     std::fs::write(data_dir.join("bundle.stamp"), digest(bundle_bytes)).map_err(err)?;
     Ok(())
 }
 pub fn installed_stamp(data_dir: &Path) -> String {
     std::fs::read_to_string(data_dir.join("bundle.stamp")).unwrap_or_default()
 }
-pub fn candidates(exe_dir: &Path) -> Res<Vec<(String, Vec<u8>)>> {
+/// A bundle the server could run: a file next to the launcher, an entry of
+/// the store, or the payload embedded in the executable.
+pub struct Candidate {
+    pub name: String,
+    pub path: Option<PathBuf>,
+    pub modified: std::time::SystemTime,
+}
+pub fn candidates(exe_dir: &Path, data_dir: Option<&Path>) -> Res<Vec<Candidate>> {
     let mut out = vec![];
-    let mut files: Vec<PathBuf> = std::fs::read_dir(exe_dir)
-        .map_err(err)?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("langolier"))
-        .collect();
-    files.sort_by_key(|p| p.metadata().and_then(|m| m.modified()).ok());
-    for p in files {
-        if let Ok(bytes) = std::fs::read(&p) {
-            out.push((
-                p.file_name()
+    if embedded_payload()?.is_some() {
+        out.push(Candidate {
+            name: "(embedded)".into(),
+            path: None,
+            modified: std::time::UNIX_EPOCH,
+        });
+    }
+    let mut dirs = vec![exe_dir.to_path_buf()];
+    if let Some(d) = data_dir {
+        dirs.push(store_dir(d));
+    }
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in rd.filter_map(Result::ok) {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("langolier") {
+                continue;
+            }
+            let Ok(m) = p.metadata() else { continue };
+            out.push(Candidate {
+                name: p
+                    .file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string(),
-                bytes,
-            ));
+                modified: m.modified().unwrap_or(std::time::UNIX_EPOCH),
+                path: Some(p),
+            });
         }
     }
-    if let Some(p) = embedded_payload()? {
-        out.insert(0, ("(embedded)".into(), p));
-    }
+    out.sort_by_key(|c| c.modified);
     Ok(out)
 }
-/// Applies the best candidate when it differs from the installed one.
+pub fn read_candidate(c: &Candidate) -> Res<Vec<u8>> {
+    match &c.path {
+        Some(p) => std::fs::read(p).map_err(err),
+        None => embedded_payload()?.ok_or_else(|| "Embedded payload missing.".to_string()),
+    }
+}
+/// Newest candidate wins. Every install lands in the store, so the dropdown
+/// of the chat page shows the kit's own bundle as well as later imports.
 pub fn sync(exe_dir: &Path, data_dir: &Path) -> Res<Option<String>> {
-    let cands = candidates(exe_dir)?;
-    let Some((name, bytes)) = cands.last() else {
+    let cands = candidates(exe_dir, Some(data_dir))?;
+    let Some(c) = cands.last() else {
         return Ok(None);
     };
-    if digest(bytes) == installed_stamp(data_dir) {
+    let bytes = read_candidate(c)?;
+    if digest(&bytes) == installed_stamp(data_dir) {
         return Ok(None);
     }
+    let from_kit = c
+        .path
+        .as_ref()
+        .is_none_or(|p| p.parent() != Some(store_dir(data_dir).as_path()));
+    install(&bytes, data_dir)?;
+    archive(data_dir, &bytes, from_kit)?;
+    Ok(Some(c.name.clone()))
+}
+pub fn store_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("bundles")
+}
+const STORE_KEEP: usize = 20;
+/// One file per distinct bundle: <slug>-<timestamp>-<digest8>[.kit].langolier
+/// A `.kit` marker names the bundle the kit shipped with, which is never deleted.
+pub fn archive(data_dir: &Path, bytes: &[u8], from_kit: bool) -> Res<PathBuf> {
+    let dir = store_dir(data_dir);
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    let d = digest(bytes);
+    let short = &d[..8];
+    if let Some(existing) = store_entries(data_dir)?
+        .into_iter()
+        .find(|e| e.digest8 == short)
+    {
+        return Ok(existing.path);
+    }
+    let staged = dir.join(format!("incoming-{}.langolier", std::process::id()));
+    std::fs::write(&staged, bytes).map_err(err)?;
+    let name = validate(&staged)
+        .map(|a| slug(&a.name))
+        .unwrap_or_else(|_| "bundle".into());
+    let stamp = chrono_stamp();
+    let file = dir.join(format!(
+        "{name}-{stamp}-{short}{}.langolier",
+        if from_kit { ".kit" } else { "" }
+    ));
+    std::fs::rename(&staged, &file).map_err(err)?;
+    prune(data_dir)?;
+    Ok(file)
+}
+fn chrono_stamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Civil date from a Unix timestamp, UTC, no chrono dependency.
+    let days = secs / 86400;
+    let (h, m, sec) = ((secs % 86400) / 3600, (secs % 3600) / 60, secs % 60);
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mo <= 2 { y + 1 } else { y };
+    format!("{y:04}{mo:02}{d:02}-{h:02}{m:02}{sec:02}")
+}
+pub struct StoreEntry {
+    pub id: String,
+    pub path: PathBuf,
+    pub name: String,
+    pub digest8: String,
+    pub kit: bool,
+    pub size: u64,
+    pub modified: u64,
+    exact: std::time::SystemTime,
+    pub active: bool,
+}
+pub fn store_entries(data_dir: &Path) -> Res<Vec<StoreEntry>> {
+    let dir = store_dir(data_dir);
+    let mut out = vec![];
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return Ok(out);
+    };
+    let stamp = installed_stamp(data_dir);
+    for e in rd.filter_map(Result::ok) {
+        let path = e.path();
+        let id = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        if !id.ends_with(".langolier") || id.starts_with("incoming-") {
+            continue;
+        }
+        let stem = id.trim_end_matches(".langolier");
+        let (stem, kit) = match stem.strip_suffix(".kit") {
+            Some(s) => (s, true),
+            None => (stem, false),
+        };
+        // <name>-<yyyymmdd>-<hhmmss>-<digest8>; the name itself may hold dashes.
+        let mut parts = stem.rsplitn(4, '-');
+        let digest8 = parts.next().unwrap_or("").to_string();
+        let _time = parts.next();
+        let _date = parts.next();
+        let name = parts.next().unwrap_or(stem).to_string();
+        let Ok(m) = path.metadata() else { continue };
+        let exact = m.modified().unwrap_or(std::time::UNIX_EPOCH);
+        let modified = exact
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // The display name lives inside the bundle; the file name only has the slug.
+        let name = validate(&path).map(|a| a.name).unwrap_or(name);
+        out.push(StoreEntry {
+            active: stamp.starts_with(&digest8) && !digest8.is_empty(),
+            id,
+            path,
+            name,
+            digest8,
+            kit,
+            size: m.len(),
+            modified,
+            exact,
+        });
+    }
+    out.sort_by_key(|e| std::cmp::Reverse(e.exact));
+    Ok(out)
+}
+fn prune(data_dir: &Path) -> Res<()> {
+    let entries = store_entries(data_dir)?;
+    for e in entries.into_iter().skip(STORE_KEEP) {
+        if !e.kit && !e.active {
+            let _ = std::fs::remove_file(&e.path);
+        }
+    }
+    Ok(())
+}
+fn store_entry(data_dir: &Path, id: &str) -> Res<StoreEntry> {
+    store_entries(data_dir)?
+        .into_iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| "Unknown bundle.".to_string())
+}
+/// Makes a stored bundle the newest candidate and installs it now.
+pub fn store_restore(data_dir: &Path, id: &str) -> Res<String> {
+    let e = store_entry(data_dir, id)?;
+    let bytes = std::fs::read(&e.path).map_err(err)?;
+    std::fs::File::open(&e.path)
+        .and_then(|f| f.set_modified(std::time::SystemTime::now()))
+        .map_err(err)?;
+    install(&bytes, data_dir)?;
+    Ok(e.name)
+}
+pub fn store_delete(data_dir: &Path, id: &str) -> Res<()> {
+    let e = store_entry(data_dir, id)?;
+    if e.kit {
+        return Err("The bundle the kit shipped with cannot be deleted.".into());
+    }
+    if e.active {
+        return Err("This bundle is the one running. Restore another one first.".into());
+    }
+    std::fs::remove_file(&e.path).map_err(err)
+}
+/// Import from the chat page: validate, archive, install.
+pub fn store_import(data_dir: &Path, bytes: &[u8]) -> Res<String> {
+    let staged = store_dir(data_dir).join(format!("incoming-{}.langolier", std::process::id()));
+    std::fs::create_dir_all(store_dir(data_dir)).map_err(err)?;
+    std::fs::write(&staged, bytes).map_err(err)?;
+    let checked = validate(&staged);
+    let _ = std::fs::remove_file(&staged);
+    let a = checked?;
+    let file = archive(data_dir, bytes, false)?;
+    std::fs::File::open(&file)
+        .and_then(|f| f.set_modified(std::time::SystemTime::now()))
+        .map_err(err)?;
     install(bytes, data_dir)?;
-    Ok(Some(name.clone()))
+    Ok(a.name)
 }
 #[cfg(target_os = "macos")]
 fn base64_decode(s: &str) -> Vec<u8> {
@@ -777,6 +997,64 @@ pub fn slug_of(path: &Path) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn store_archives_restores_and_protects_the_kit() {
+        let root = tempfile::tempdir().unwrap();
+        let kit = root.path().join("kit");
+        let data = root.path().join("state");
+        std::fs::create_dir_all(&kit).unwrap();
+        let src = Db::new(&root.path().join("src")).unwrap();
+        let mut bundles = vec![];
+        for name in ["Alpha", "Beta"] {
+            let a = assistant::save(
+                &src,
+                Assistant {
+                    name: name.into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let path = root.path().join(format!("{name}.langolier"));
+            write_langolier(&src, &a, &path).unwrap();
+            bundles.push(std::fs::read(&path).unwrap());
+        }
+        // First start: the kit's bundle is installed and archived with the .kit marker.
+        std::fs::write(kit.join("alpha.langolier"), &bundles[0]).unwrap();
+        assert_eq!(
+            sync(&kit, &data).unwrap().as_deref(),
+            Some("alpha.langolier")
+        );
+        let entries = store_entries(&data).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].kit && entries[0].active);
+        assert_eq!(entries[0].name, "Alpha");
+        // Import from the page: archived, installed, newest, no reversal by sync.
+        assert_eq!(store_import(&data, &bundles[1]).unwrap(), "Beta");
+        assert!(sync(&kit, &data).unwrap().is_none());
+        let entries = store_entries(&data).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].active && entries[0].name == "Beta");
+        // Same bytes twice never make two entries.
+        store_import(&data, &bundles[1]).unwrap();
+        assert_eq!(store_entries(&data).unwrap().len(), 2);
+        // The kit entry and the running one refuse deletion.
+        let kit_id = entries[1].id.clone();
+        let beta_id = entries[0].id.clone();
+        assert!(store_delete(&data, &kit_id).unwrap_err().contains("kit"));
+        assert!(store_delete(&data, &beta_id)
+            .unwrap_err()
+            .contains("running"));
+        // Restore the kit, then Beta becomes deletable.
+        assert_eq!(store_restore(&data, &kit_id).unwrap(), "Alpha");
+        assert!(sync(&kit, &data).unwrap().is_none());
+        assert!(store_entries(&data)
+            .unwrap()
+            .iter()
+            .any(|e| e.id == kit_id && e.active));
+        store_delete(&data, &beta_id).unwrap();
+        assert_eq!(store_entries(&data).unwrap().len(), 1);
+        assert!(store_delete(&data, "../langolier.sqlite3").is_err());
+    }
     #[test]
     fn export_scope_and_update_keeps_conversations() {
         let root = tempfile::tempdir().unwrap();

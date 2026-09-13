@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -80,10 +80,31 @@
   button:disabled { opacity: .5; cursor: default; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 12px; font-weight: 500; font-size: 13px; }
   .error { color: #d9534f; }
-  .hint { text-align: center; font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+  .hint { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+  .gear { display: none; background: none; border: 0; padding: 0 4px; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; }
+  .gear:hover { opacity: 1; }
+  .gear.show { display: inline-block; }
   .banner { display: none; margin: 0; padding: 9px 20px; font-size: 12.5px; line-height: 1.5; background: rgba(226,180,145,.14); color: var(--text); border-bottom: 1px solid var(--line); }
   .banner.show { display: block; }
   .banner code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  dialog {
+    border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text);
+    padding: 20px 22px; width: min(520px, 92vw); font-size: 14px;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h2 { margin: 0 0 4px; font-size: 15px; }
+  dialog p { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+  dialog section { border-top: 1px solid var(--line); padding: 14px 0 4px; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  dialog input, dialog select {
+    width: 100%; font: inherit; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); outline: none;
+  }
+  dialog input:focus, dialog select:focus { border-color: var(--accent); }
+  dialog .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  dialog .row button { padding: 9px 14px; font-size: 13px; }
+  dialog .status { min-height: 1.4em; font-size: 12.5px; margin-top: 12px; }
+  dialog .close { margin-left: auto; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } }
   @keyframes pulse { 50% { opacity: .5; } }
   @keyframes blink { 50% { opacity: 0; } }
@@ -96,34 +117,89 @@
     <h1 id="name">Assistant</h1>
     <p id="welcome"></p>
   </div>
-  <button class="ghost new" id="new" type="button">Nouvelle conversation</button>
+  <button class="ghost new" id="new" type="button"></button>
 </header>
 <p class="banner" id="banner"></p>
 <main><div class="thread" id="thread"></div></main>
 <footer>
   <form id="form">
-    <textarea id="q" rows="1" placeholder="Posez votre question…" autofocus></textarea>
-    <button id="send" type="submit">Envoyer</button>
+    <textarea id="q" rows="1" autofocus></textarea>
+    <button id="send" type="submit"></button>
   </form>
-  <p class="hint">Answers grounded only in this assistant's knowledge.</p>
+  <p class="hint"><span id="hint"></span><button class="gear" id="gear" type="button" title="Administration">⚙</button></p>
 </footer>
+<dialog id="admin">
+  <h2 id="admin-title"></h2>
+  <p id="admin-intro"></p>
+  <section>
+    <label for="secret" id="secret-label"></label>
+    <input id="secret" type="password" autocomplete="off" />
+  </section>
+  <section id="import-section" hidden>
+    <label for="file" id="import-label"></label>
+    <input id="file" type="file" accept=".langolier" />
+    <div class="row"><button id="import" type="button"></button></div>
+  </section>
+  <section id="restore-section" hidden>
+    <label for="bundles" id="restore-label"></label>
+    <select id="bundles"></select>
+    <div class="row">
+      <button id="restore" type="button"></button>
+      <button id="delete" class="ghost" type="button"></button>
+    </div>
+  </section>
+  <div class="status" id="status"></div>
+  <div class="row"><button id="admin-close" class="ghost close" type="button"></button></div>
+</dialog>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
+  const fr = (navigator.language || "").toLowerCase().startsWith("fr");
+  document.documentElement.lang = fr ? "fr" : "en";
+  const T = fr ? {
+    new: "Nouvelle conversation", ask: "Posez votre question…", send: "Envoyer", connecting: "Connexion…",
+    error: "Erreur", none: "Aucune réponse reçue.", configFailed: "Impossible de charger la configuration : ",
+    grounded: "Réponses fondées uniquement sur les connaissances de cet assistant.",
+    cited: " Les sources citées apparaissent sous chaque réponse.",
+    adminTitle: "Administration", adminIntro: "Remplacer le cerveau de cet assistant par un autre fichier .langolier, ou revenir à une version précédente. Les conversations sont conservées.",
+    secret: "Secret d’administration", importLabel: "Importer un fichier .langolier", importBtn: "Importer",
+    restoreLabel: "Versions disponibles", restoreBtn: "Restaurer", deleteBtn: "Supprimer", close: "Fermer",
+    kit: "livré avec le kit", active: "en cours", pickFile: "Choisissez un fichier.", pickBundle: "Choisissez une version.",
+    uploading: "Envoi…", working: "En cours…", imported: "Importé : ", restored: "Restauré : ", deleted: "Supprimé.",
+    confirmDelete: "Supprimer cette version ? Elle ne pourra plus être restaurée.",
+    forceAsk: "Continuer quand même, avec la recherche par mots seulement ?",
+  } : {
+    new: "New conversation", ask: "Ask your question…", send: "Send", connecting: "Connecting…",
+    error: "Error", none: "No answer received.", configFailed: "Could not load the configuration: ",
+    grounded: "Answers grounded only in this assistant's knowledge.",
+    cited: " Cited sources appear under each answer.",
+    adminTitle: "Administration", adminIntro: "Replace this assistant's brain with another .langolier file, or go back to an earlier version. Conversations are kept.",
+    secret: "Admin secret", importLabel: "Import a .langolier file", importBtn: "Import",
+    restoreLabel: "Available versions", restoreBtn: "Restore", deleteBtn: "Delete", close: "Close",
+    kit: "shipped with the kit", active: "running", pickFile: "Pick a file.", pickBundle: "Pick a version.",
+    uploading: "Uploading…", working: "Working…", imported: "Imported: ", restored: "Restored: ", deleted: "Deleted.",
+    confirmDelete: "Delete this version? It cannot be restored afterwards.",
+    forceAsk: "Continue anyway, with word search only?",
+  };
+  for (const [id, key] of [["new", "new"], ["send", "send"], ["admin-title", "adminTitle"], ["admin-intro", "adminIntro"],
+    ["secret-label", "secret"], ["import-label", "importLabel"], ["import", "importBtn"], ["restore-label", "restoreLabel"],
+    ["restore", "restoreBtn"], ["delete", "deleteBtn"], ["admin-close", "close"]]) $(id).textContent = T[key];
+  $("q").placeholder = T.ask;
+
   const thread = $("thread"), q = $("q"), send = $("send"), form = $("form");
   let config = { name: "Assistant" };
   let conversation = localStorage.getItem("conversation") || "";
   let busy = false;
 
   const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  // Mise en forme minimale : gras, code, blocs de code. Pas de HTML entrant.
+  // Minimal formatting: bold, code, code blocks. No incoming HTML.
   const render = (s) => escapeHtml(s)
     .replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`)
     .replace(/`([^`\n]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
   const initial = (name) => (name.trim()[0] || "?").toUpperCase();
 
-  function avatarNode(small) {
+  function avatarNode() {
     const el = document.createElement("div");
     el.className = "avatar";
     if (config.avatar) el.innerHTML = `<img alt="" src="${config.avatar}">`;
@@ -157,11 +233,13 @@
     document.title = config.name;
     $("name").textContent = config.name;
     $("welcome").textContent = config.welcome || "";
-    document.querySelector(".hint").textContent = config.show_sources === false
-      ? "Answers grounded only in this assistant's knowledge."
-      : "Answers grounded only in this assistant's knowledge. Cited sources appear under each answer.";
-    const av = $("avatar"); av.innerHTML = ""; av.appendChild(avatarNode().firstChild || document.createTextNode(initial(config.name)));
-    if (config.avatar) { av.innerHTML = `<img alt="" src="${config.avatar}">`; }
+    $("hint").textContent = T.grounded + (config.show_sources === false ? "" : T.cited);
+    const av = $("avatar"); av.innerHTML = "";
+    if (config.avatar) av.innerHTML = `<img alt="" src="${config.avatar}">`; else av.textContent = initial(config.name);
+    const admin = config.admin || {};
+    $("gear").classList.toggle("show", !!admin.enabled);
+    $("import-section").hidden = !admin.import;
+    $("restore-section").hidden = !admin.restore;
   }
   async function loadHealth() {
     try {
@@ -171,7 +249,7 @@
         b.innerHTML = (h.degraded ? "⚠︎ " : "✖ ") + h.problems.map(escapeHtml).join("<br>").replace(/`([^`]+)`/g, "<code>$1</code>");
         b.classList.add("show");
       } else b.classList.remove("show");
-    } catch (e) { /* la page reste utilisable */ }
+    } catch (e) { /* the page stays usable */ }
   }
   async function loadHistory() {
     thread.innerHTML = "";
@@ -189,7 +267,7 @@
     busy = true; send.disabled = true; q.value = ""; q.style.height = "";
     addMessage("user", text);
     const bubble = addMessage("assistant", "");
-    const phase = document.createElement("span"); phase.className = "phase"; phase.textContent = "Connexion…";
+    const phase = document.createElement("span"); phase.className = "phase"; phase.textContent = T.connecting;
     bubble.appendChild(phase);
     let answer = "";
     try {
@@ -211,21 +289,104 @@
           else if (ev === "phase") phase.textContent = payload;
           else if (ev === "token") { answer += payload; bubble.innerHTML = render(answer); bubble.appendChild(caret); scroll(); }
           else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); }
-          else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(payload.error || "Erreur")}</span>`; }
+          else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(payload.error || T.error)}</span>`; }
         }
       }
-      if (!answer && !bubble.textContent.trim()) bubble.textContent = "No answer received.";
+      if (!answer && !bubble.textContent.trim()) bubble.textContent = T.none;
     } catch (e) {
       bubble.innerHTML = `<span class="error">${escapeHtml(String(e))}</span>`;
     } finally {
       busy = false; send.disabled = false; q.focus(); scroll();
     }
   }
+
+  // Administration: import, restore, delete. The secret only lives in this
+  // tab's session storage and travels in a header, never in the URL.
+  const dlg = $("admin"), status = $("status"), secret = $("secret"), bundles = $("bundles");
+  secret.value = sessionStorage.getItem("admin-secret") || "";
+  const headers = () => ({ "X-Admin-Token": secret.value.trim() });
+  const say = (text, isError) => { status.textContent = text; status.className = "status" + (isError ? " error" : ""); };
+  const when = (t) => new Date(t * 1000).toLocaleString(fr ? "fr-FR" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const mb = (n) => `${(n / 1048576).toFixed(1)} ${fr ? "Mo" : "MB"}`;
+  function fill(list) {
+    bundles.innerHTML = "";
+    for (const b of list.bundles || []) {
+      const o = document.createElement("option");
+      o.value = b.id;
+      const tags = [b.active ? T.active : "", b.kit ? T.kit : ""].filter(Boolean).join(", ");
+      o.textContent = `${b.name}  ·  ${when(b.imported_at)}  ·  ${mb(b.size)}${tags ? `  (${tags})` : ""}`;
+      o.dataset.active = b.active ? "1" : ""; o.dataset.kit = b.kit ? "1" : "";
+      bundles.appendChild(o);
+    }
+    syncButtons();
+  }
+  function syncButtons() {
+    const o = bundles.selectedOptions[0];
+    $("restore").disabled = !o || o.dataset.active === "1";
+    $("delete").disabled = !o || o.dataset.active === "1" || o.dataset.kit === "1";
+  }
+  async function call(path, init) {
+    const r = await fetch(path, { ...init, headers: { ...headers(), ...(init?.headers || {}) } });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    return body;
+  }
+  async function refresh() {
+    say(T.working);
+    const list = await call("/api/admin/bundles");
+    fill(list); say("");
+  }
+  async function applied(prefix, name) {
+    sessionStorage.setItem("admin-secret", secret.value.trim());
+    say(prefix + name);
+    conversation = ""; localStorage.removeItem("conversation");
+    await loadConfig(); await loadHistory(); await loadHealth();
+  }
+  $("gear").addEventListener("click", () => { say(""); dlg.showModal(); if (secret.value) refresh().catch((e) => say(e.message, true)); });
+  $("admin-close").addEventListener("click", () => dlg.close());
+  secret.addEventListener("change", () => refresh().catch((e) => say(e.message, true)));
+  bundles.addEventListener("change", syncButtons);
+  $("import").addEventListener("click", async () => {
+    const f = $("file").files[0];
+    if (!f) return say(T.pickFile, true);
+    say(T.uploading);
+    const send = (force) => call(`/api/admin/import${force ? "?force=1" : ""}`, { method: "POST", body: f, headers: { "Content-Type": "application/octet-stream" } });
+    try {
+      let r;
+      try { r = await send(false); }
+      catch (e) {
+        if (!/force=1/.test(e.message) || !confirm(`${e.message}\n\n${T.forceAsk}`)) throw e;
+        r = await send(true);
+      }
+      fill(r.list); $("file").value = "";
+      await applied(T.imported, r.name);
+    } catch (e) { say(e.message, true); }
+  });
+  $("restore").addEventListener("click", async () => {
+    const id = bundles.value;
+    if (!id) return say(T.pickBundle, true);
+    say(T.working);
+    try {
+      const r = await call("/api/admin/restore", { method: "POST", body: JSON.stringify({ id }), headers: { "Content-Type": "application/json" } });
+      fill(r.list);
+      await applied(T.restored, r.name);
+    } catch (e) { say(e.message, true); }
+  });
+  $("delete").addEventListener("click", async () => {
+    const id = bundles.value;
+    if (!id) return say(T.pickBundle, true);
+    if (!confirm(T.confirmDelete)) return;
+    try {
+      const r = await call("/api/admin/delete", { method: "POST", body: JSON.stringify({ id }), headers: { "Content-Type": "application/json" } });
+      fill(r.list); say(T.deleted);
+    } catch (e) { say(e.message, true); }
+  });
+
   form.addEventListener("submit", (e) => { e.preventDefault(); const t = q.value.trim(); if (t && !busy) ask(t); });
   q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
   q.addEventListener("input", () => { q.style.height = ""; q.style.height = Math.min(160, q.scrollHeight) + "px"; });
   $("new").addEventListener("click", () => { conversation = ""; localStorage.removeItem("conversation"); loadHistory(); q.focus(); });
-  loadConfig().then(loadHistory).then(loadHealth).catch((e) => addMessage("assistant", `Impossible de charger la configuration : ${e}`));
+  loadConfig().then(loadHistory).then(loadHealth).catch((e) => addMessage("assistant", T.configFailed + e));
   setInterval(loadHealth, 30000);
 })();
 </script>

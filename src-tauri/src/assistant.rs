@@ -47,6 +47,16 @@ pub struct Assistant {
     pub telegram_token: String,
     /// Telegram whitelist: ids or @handles; empty means everyone.
     pub telegram_allowed: String,
+    /// Remote administration of the exported chatbot from its own page.
+    pub admin_enabled: bool,
+    /// SHA-256 of the admin secret. Never serialised to the interface; an
+    /// incoming non-empty value is a new plaintext secret to hash.
+    #[serde(skip_serializing)]
+    pub admin_secret: String,
+    #[serde(skip_deserializing)]
+    pub admin_secret_set: bool,
+    pub admin_import: bool,
+    pub admin_restore: bool,
     pub created: i64,
 }
 impl Default for Assistant {
@@ -66,6 +76,11 @@ impl Default for Assistant {
             daily_token_budget: 0,
             telegram_token: String::new(),
             telegram_allowed: String::new(),
+            admin_enabled: false,
+            admin_secret: String::new(),
+            admin_secret_set: false,
+            admin_import: true,
+            admin_restore: true,
             created: 0,
         }
     }
@@ -119,6 +134,22 @@ pub fn migrate(c: &rusqlite::Connection) -> Res<()> {
             "telegram_allowed",
             "ALTER TABLE assistants ADD COLUMN telegram_allowed TEXT NOT NULL DEFAULT '';",
         ),
+        (
+            "admin_enabled",
+            "ALTER TABLE assistants ADD COLUMN admin_enabled INTEGER NOT NULL DEFAULT 0;",
+        ),
+        (
+            "admin_secret",
+            "ALTER TABLE assistants ADD COLUMN admin_secret TEXT NOT NULL DEFAULT '';",
+        ),
+        (
+            "admin_import",
+            "ALTER TABLE assistants ADD COLUMN admin_import INTEGER NOT NULL DEFAULT 1;",
+        ),
+        (
+            "admin_restore",
+            "ALTER TABLE assistants ADD COLUMN admin_restore INTEGER NOT NULL DEFAULT 1;",
+        ),
     ] {
         let has: i64 = c
             .query_row(
@@ -150,9 +181,31 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Assistant> {
         daily_token_budget: r.get(12)?,
         telegram_token: r.get(13)?,
         telegram_allowed: r.get(14)?,
+        admin_enabled: r.get::<_, i64>(15)? != 0,
+        admin_secret: r.get(16)?,
+        admin_secret_set: !r.get::<_, String>(16)?.is_empty(),
+        admin_import: r.get::<_, i64>(17)? != 0,
+        admin_restore: r.get::<_, i64>(18)? != 0,
     })
 }
-const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed";
+const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore";
+/// Constant-time check of a plaintext secret against the stored hash.
+pub fn admin_secret_matches(a: &Assistant, secret: &str) -> bool {
+    let given = hash_secret(secret);
+    let stored = a.admin_secret.as_bytes();
+    if stored.len() != given.len() {
+        return false;
+    }
+    given
+        .bytes()
+        .zip(stored)
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+pub fn hash_secret(secret: &str) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(secret.trim().as_bytes()))
+}
 pub fn list(db: &Db) -> Res<Vec<Assistant>> {
     let c = db.conn()?;
     let mut st = c
@@ -208,14 +261,32 @@ pub fn save(db: &Db, mut a: Assistant) -> Res<Assistant> {
     a.overrides = Value::Object(clean);
     // Overrides must still produce valid settings.
     effective(&db.settings()?, Some(&a))?;
+    // Empty keeps the stored hash; anything else is a new plaintext secret.
+    let previous = if a.id.is_empty() {
+        String::new()
+    } else {
+        get(db, &a.id)?.map(|x| x.admin_secret).unwrap_or_default()
+    };
+    a.admin_secret = if a.admin_secret.trim().is_empty() {
+        previous
+    } else {
+        if a.admin_secret.trim().chars().count() < 12 {
+            return Err("The admin secret needs at least 12 characters.".into());
+        }
+        hash_secret(&a.admin_secret)
+    };
+    if a.admin_enabled && a.admin_secret.is_empty() {
+        return Err("Remote administration needs a secret.".into());
+    }
+    a.admin_secret_set = !a.admin_secret.is_empty();
     if a.id.is_empty() {
         a.id = uuid::Uuid::new_v4().to_string();
         a.created = now();
     }
     db.conn()?
         .execute(
-            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed",
-            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim()],
+            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed,admin_enabled=excluded.admin_enabled,admin_secret=excluded.admin_secret,admin_import=excluded.admin_import,admin_restore=excluded.admin_restore",
+            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim(), a.admin_enabled as i64, a.admin_secret, a.admin_import as i64, a.admin_restore as i64],
         )
         .map_err(err)?;
     Ok(a)

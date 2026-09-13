@@ -785,4 +785,28 @@ export const FR: Record<string, string> = {
   Sand: "Sable",
   Ink: "Encre",
   Coral: "Corail",
+  "Remote administration": "Administration à distance",
+  "Update or roll back the exported chatbot from its own page":
+    "Mettre à jour ou revenir en arrière depuis la page du chatbot exporté",
+  "Enable administration from the chat page":
+    "Activer l’administration depuis la page de conversation",
+  "A small gear appears in the page footer. Every action needs the secret below; with a wrong secret five times, the page pauses for fifteen minutes.":
+    "Un petit engrenage apparaît en pied de page. Chaque action exige le secret ci-dessous ; après cinq mauvais secrets, la page se met en pause quinze minutes.",
+  "Admin secret (set; type a new one to replace it)":
+    "Secret d’administration (défini ; saisissez-en un nouveau pour le remplacer)",
+  "Admin secret (at least 12 characters)":
+    "Secret d’administration (12 caractères minimum)",
+  "Secret generated: {secret}. Copy it now, it will not be shown again.":
+    "Secret généré : {secret}. Copiez-le maintenant, il ne sera plus affiché.",
+  Generate: "Générer",
+  "Allow importing a .langolier from the page":
+    "Autoriser l’import d’un .langolier depuis la page",
+  "Allow restoring or deleting earlier versions from the page":
+    "Autoriser la restauration ou la suppression de versions précédentes depuis la page",
+  "Every bundle the chatbot ever ran is kept on the server, twenty at most, named and timestamped. Nothing is ever downloaded from the page: no export, so the corpus and the API key stay on the server. The bundle the kit shipped with cannot be deleted.":
+    "Chaque bundle que le chatbot a fait tourner est conservé sur le serveur, vingt au plus, nommé et horodaté. Rien n’est jamais téléchargé depuis la page : pas d’export, le corpus et la clé d’API restent sur le serveur. Le bundle livré avec le kit ne peut pas être supprimé.",
+  "The admin secret needs at least 12 characters.":
+    "Le secret d’administration doit faire au moins 12 caractères.",
+  "Remote administration needs a secret.":
+    "L’administration à distance exige un secret.",
 };

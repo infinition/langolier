@@ -63,6 +63,11 @@ const blank = (): Assistant => ({
   daily_token_budget: 0,
   telegram_token: "",
   telegram_allowed: "",
+  admin_enabled: false,
+  admin_secret: "",
+  admin_secret_set: false,
+  admin_import: true,
+  admin_restore: true,
   created: 0,
 });
 
@@ -782,7 +787,7 @@ export default function Assistants({
               {t(
                 "The bridge polls the Telegram servers: no port to open, the web launcher or",
               )}{" "}
-              <code>serveur.sh</code>{" "}
+              <code>server.sh</code>{" "}
               {t(
                 "just has to be running. One Telegram chat = one conversation;",
               )}{" "}
@@ -791,6 +796,90 @@ export default function Assistants({
                 "opens another one. Caps and source privacy apply. Messages travel through Telegram, so keep it to content that may go there.",
               )}
             </p>
+            <div className="panel-heading">
+              <div>
+                <h3>{t("Remote administration")}</h3>
+                <p>
+                  {t(
+                    "Update or roll back the exported chatbot from its own page",
+                  )}
+                </p>
+              </div>
+            </div>
+            <label className="check inline-check">
+              <input
+                type="checkbox"
+                checked={editing.admin_enabled}
+                onChange={(e) => field("admin_enabled", e.target.checked)}
+              />
+              {t("Enable administration from the chat page")}
+              <small>
+                {t(
+                  "A small gear appears in the page footer. Every action needs the secret below; with a wrong secret five times, the page pauses for fifteen minutes.",
+                )}
+              </small>
+            </label>
+            {editing.admin_enabled && (
+              <>
+                <label>
+                  {editing.admin_secret_set
+                    ? t("Admin secret (set; type a new one to replace it)")
+                    : t("Admin secret (at least 12 characters)")}
+                  <div className="searchbox">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={editing.admin_secret}
+                      onChange={(e) => field("admin_secret", e.target.value)}
+                      placeholder={
+                        editing.admin_secret_set ? "••••••••••••" : ""
+                      }
+                    />
+                    <Button
+                      onClick={() => {
+                        const bytes = new Uint8Array(18);
+                        crypto.getRandomValues(bytes);
+                        const secret = btoa(String.fromCharCode(...bytes))
+                          .replace(/[+/=]/g, "")
+                          .slice(0, 22);
+                        field("admin_secret", secret);
+                        onNotify(
+                          t(
+                            "Secret generated: {secret}. Copy it now, it will not be shown again.",
+                            { secret },
+                          ),
+                        );
+                      }}
+                    >
+                      {t("Generate")}
+                    </Button>
+                  </div>
+                </label>
+                <label className="check inline-check">
+                  <input
+                    type="checkbox"
+                    checked={editing.admin_import}
+                    onChange={(e) => field("admin_import", e.target.checked)}
+                  />
+                  {t("Allow importing a .langolier from the page")}
+                </label>
+                <label className="check inline-check">
+                  <input
+                    type="checkbox"
+                    checked={editing.admin_restore}
+                    onChange={(e) => field("admin_restore", e.target.checked)}
+                  />
+                  {t(
+                    "Allow restoring or deleting earlier versions from the page",
+                  )}
+                </label>
+                <p className="field-help">
+                  {t(
+                    "Every bundle the chatbot ever ran is kept on the server, twenty at most, named and timestamped. Nothing is ever downloaded from the page: no export, so the corpus and the API key stay on the server. The bundle the kit shipped with cannot be deleted.",
+                  )}
+                </p>
+              </>
+            )}
             <label>
               {t("Engine for the exported kit")}
               <select
