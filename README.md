@@ -98,6 +98,8 @@ npm run tauri build
 
 For development, `npm run desktop` starts Vite and the Tauri shell with hot reload.
 
+On macOS, `Launch-Mac.command` opens the app and starts Ollama when needed; `Stop-Ollama.command` shuts Ollama down so no model stays in memory.
+
 ### Pick an engine
 
 Langolier never hardcodes a model. Set the provider under **Engines**.
@@ -258,6 +260,8 @@ npm run tauri build
 ```
 
 Pour développer, `npm run desktop` lance Vite et la coquille Tauri avec rechargement à chaud.
+
+Sur macOS, `Launch-Mac.command` ouvre l'app et démarre Ollama si besoin ; `Stop-Ollama.command` l'arrête pour qu'aucun modèle ne reste en mémoire.
 
 ### Choisir un moteur
 
