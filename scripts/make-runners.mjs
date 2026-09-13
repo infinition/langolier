@@ -67,16 +67,16 @@ if (os === "darwin") {
 }
 const webBin = os === "darwin" ? `"./${display} Web.app/Contents/MacOS/chatbotweb"` : "./chatbotweb";
 writeFileSync(
-  join(outDir, "serveur.sh"),
+  join(outDir, "server.sh"),
   `#!/bin/bash\ncd "$(dirname "$0")"\n${webBin} --serve --host 0.0.0.0 --port "\${PORT:-8080}"\n`,
 );
-chmodSync(join(outDir, "serveur.sh"), 0o755);
+chmodSync(join(outDir, "server.sh"), 0o755);
 writeFileSync(
-  join(outDir, "serveur.bat"),
+  join(outDir, "server.bat"),
   `@echo off\r\ncd /d "%~dp0"\r\nchatbotweb.exe --serve --host 0.0.0.0 --port 8080\r\n`,
 );
 writeFileSync(
-  join(outDir, "LISEZ-MOI.md"),
+  join(outDir, "README.md"),
   `# Langolier chatbot launchers (${os})\n\nDrop a \`.langolier\` file (exported from Langolier > Assistants) in this folder, then run:\n\n- ${made[0]}: standalone chat window\n- ${made[1]}: chat page in the browser (port 8787)\n- server.sh / server.bat: the page on the network, headless, port 8080\n\nTo update: replace the \`.langolier\`. It is picked up in under 30 seconds, without a restart, keeping conversations.\n`,
 );
 console.log(`Launchers written to ${outDir}: ${made.join(", ")}`);

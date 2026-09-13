@@ -848,4 +848,22 @@ export const FR: Record<string, string> = {
   "Follow the visitor's browser": "Suivre le navigateur du visiteur",
   "Buttons, placeholders and notices of the exported chatbot page. The assistant's own answers follow its mission and the question.":
     "Boutons, textes d’aide et messages de la page du chatbot exporté. Les réponses de l’assistant suivent sa mission et la question posée.",
+  "Window launcher": "Lanceur fenêtre",
+  "How the exported window app sits on the desktop":
+    "Comment l’app fenêtre exportée se place sur le bureau",
+  "Icon in the menu bar or system tray":
+    "Icône dans la barre des menus ou la zone de notification",
+  "Open, Ask and Quit from the icon. Closing the window then hides it instead of quitting.":
+    "Ouvrir, Demander et Quitter depuis l’icône. Fermer la fenêtre la masque alors au lieu de quitter.",
+  "Start hidden, in the menu bar": "Démarrer réduit, dans la barre des menus",
+  "Global shortcut for the floating question bar (empty = none)":
+    "Raccourci global de la barre de question flottante (vide = aucun)",
+  Clear: "Effacer",
+  "Like Langolier's own palette: a floating bar over any application, Esc or a click outside closes it. Works on macOS, Windows and Linux.":
+    "Comme la palette de Langolier : une barre flottante par-dessus n’importe quelle application, Échap ou un clic à l’extérieur la ferme. Fonctionne sur macOS, Windows et Linux.",
+  "Langolier opens without a window; the icon and the shortcut are there.":
+    "Langolier s’ouvre sans fenêtre ; l’icône et le raccourci restent disponibles.",
+  "Launch at login": "Lancer à l’ouverture de session",
+  "Starts hidden at login, so the palette is always one shortcut away.":
+    "Démarre réduit à l’ouverture de session : la palette est toujours à un raccourci.",
 };

@@ -26,6 +26,9 @@ export interface Settings {
   active_assistant: string;
   ingestion_paused: boolean;
   engine_idle_minutes: number;
+  tray_icon: boolean;
+  start_hidden: boolean;
+  launch_at_login: boolean;
 }
 export interface Assistant {
   id: string;
@@ -48,6 +51,9 @@ export interface Assistant {
   admin_import: boolean;
   admin_restore: boolean;
   language: string;
+  tray_icon: boolean;
+  palette_shortcut: string;
+  start_hidden: boolean;
   created: number;
 }
 export interface EmbedModel {

@@ -9,7 +9,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"], optional = true }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -25,6 +25,7 @@ pdf-extract = "0.9"
 regex = "1"
 sysinfo = "0.37"
 tauri-plugin-global-shortcut = { version = "2", optional = true }
+tauri-plugin-autostart = { version = "2", optional = true }
 # Embedded engine for exported chatbots. Metal on macOS, CPU elsewhere.
 llama-cpp-2 = { version = "0.1.156", default-features = false }
 encoding_rs = "0.8"
@@ -34,12 +35,16 @@ quick-xml = "0.42"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 llama-cpp-2 = { version = "0.1.156", default-features = false, features = ["metal"] }
+# Dock icon at run time, so a bare binary or a hand-made .app still shows one.
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
 
 [features]
 default = ["desktop"]
 # Full application. Without this feature: server-only binary (--serve),
 # sans GTK ni WebKit, pour un NAS ou un VPS.
-desktop = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-global-shortcut", "dep:tauri-build"]
+desktop = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-global-shortcut", "dep:tauri-plugin-autostart", "dep:tauri-build"]
 
 [dev-dependencies]
 tempfile = "3"

@@ -592,6 +592,48 @@ export default function EngineSettings({
           <Button onClick={() => void api("open_palette")}>
             <Command size={14} /> {t("Try the palette")}
           </Button>
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={s.tray_icon}
+              onChange={(e) => field("tray_icon", e.target.checked)}
+            />
+            {t("Icon in the menu bar or system tray")}
+            <small>
+              {t(
+                "Open, Ask and Quit from the icon. Closing the window then hides it instead of quitting.",
+              )}
+            </small>
+          </label>
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={s.start_hidden}
+              onChange={(e) => {
+                field("start_hidden", e.target.checked);
+                if (e.target.checked) field("tray_icon", true);
+              }}
+            />
+            {t("Start hidden, in the menu bar")}
+            <small>
+              {t(
+                "Langolier opens without a window; the icon and the shortcut are there.",
+              )}
+            </small>
+          </label>
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={s.launch_at_login}
+              onChange={(e) => field("launch_at_login", e.target.checked)}
+            />
+            {t("Launch at login")}
+            <small>
+              {t(
+                "Starts hidden at login, so the palette is always one shortcut away.",
+              )}
+            </small>
+          </label>
         </section>
       </div>
       <section className="panel">

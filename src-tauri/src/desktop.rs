@@ -10,7 +10,73 @@ use std::{
     time::Instant,
 };
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+/// The tray icon lives here so a settings change can create or drop it.
+struct Tray(std::sync::Mutex<Option<tauri::tray::TrayIcon>>);
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    let slot = app.state::<Tray>();
+    let mut slot = slot.0.lock().map_err(|_| "tray")?;
+    if !enabled {
+        *slot = None;
+        return Ok(());
+    }
+    if slot.is_some() {
+        return Ok(());
+    }
+    let open = MenuItemBuilder::with_id("open", "Open Langolier")
+        .build(app)
+        .map_err(err)?;
+    let ask = MenuItemBuilder::with_id("ask", "Ask")
+        .build(app)
+        .map_err(err)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit")
+        .build(app)
+        .map_err(err)?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&open, &ask])
+        .separator()
+        .item(&quit)
+        .build()
+        .map_err(err)?;
+    let mut builder = tauri::tray::TrayIconBuilder::with_id("langolier")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .tooltip("Langolier")
+        .on_menu_event(|app, e| match e.id().as_ref() {
+            "open" => show_main(app),
+            "ask" => toggle_palette(app),
+            "quit" => {
+                crate::engine::shutdown();
+                app.exit(0)
+            }
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone()).icon_as_template(false);
+    }
+    *slot = Some(builder.build(app).map_err(err)?);
+    Ok(())
+}
+fn apply_autostart(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
+    let al = app.autolaunch();
+    let now = al.is_enabled().unwrap_or(false);
+    if enabled && !now {
+        al.enable().map_err(err)?;
+    } else if !enabled && now {
+        al.disable().map_err(err)?;
+    }
+    Ok(())
+}
 struct AppState {
     db: Db,
     cancel: Arc<AtomicBool>,
@@ -30,6 +96,10 @@ fn save_settings(app: tauri::AppHandle, state: State<AppState>, settings: Settin
     }
     crate::llm::chat_endpoint(&settings)?;
     crate::engine::set_idle_secs(settings.engine_idle_minutes * 60);
+    apply_tray(&app, settings.tray_icon || settings.start_hidden)?;
+    if let Err(e) = apply_autostart(&app, settings.launch_at_login) {
+        eprintln!("Launch at login: {e}");
+    }
     if settings.embedding_endpoint.trim() == crate::llm::EMBEDDED {
         if !crate::engine::available(&settings.embedding_model) {
             return Err(format!(
@@ -1051,8 +1121,14 @@ pub fn context() -> tauri::Context<tauri::Wry> {
     tauri::generate_context!()
 }
 pub fn run() {
+    // --hidden comes from the login item: start in the tray, no window.
+    let hidden_arg = std::env::args().any(|a| a == "--hidden");
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -1062,20 +1138,30 @@ pub fn run() {
                 })
                 .build(),
         )
-        // macOS behaviour: closing hides the window instead of quitting.
+        // macOS behaviour, and any platform with a tray icon: closing hides.
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. }
-                if cfg!(target_os = "macos") && window.label() == "main" =>
-            {
-                api.prevent_close();
-                let _ = window.hide();
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                let tray = window
+                    .app_handle()
+                    .state::<Tray>()
+                    .0
+                    .lock()
+                    .map(|t| t.is_some())
+                    .unwrap_or(false);
+                if cfg!(target_os = "macos") || tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
             tauri::WindowEvent::Focused(false) if window.label() == PALETTE => {
                 let _ = window.hide();
             }
             _ => {}
         })
-        .setup(|app| {
+        .setup(move |app| {
+            let db = Db::new(&app.path().app_data_dir()?).map_err(std::io::Error::other)?;
+            let mut s = db.settings().map_err(std::io::Error::other)?;
+            let hidden = hidden_arg || s.start_hidden;
             // The main window is built here, not in tauri.conf.
             tauri::WebviewWindowBuilder::new(
                 app,
@@ -1086,9 +1172,16 @@ pub fn run() {
             .inner_size(1440.0, 940.0)
             .min_inner_size(800.0, 600.0)
             .background_color(tauri::window::Color(0x11, 0x12, 0x11, 0xff))
+            .visible(!hidden)
             .build()?;
-            let db = Db::new(&app.path().app_data_dir()?).map_err(std::io::Error::other)?;
-            let mut s = db.settings().map_err(std::io::Error::other)?;
+            set_dock_icon(ICON_PNG);
+            app.manage(Tray(std::sync::Mutex::new(None)));
+            if let Err(e) = apply_tray(app.handle(), s.tray_icon || hidden) {
+                eprintln!("Tray: {e}");
+            }
+            if let Err(e) = apply_autostart(app.handle(), s.launch_at_login) {
+                eprintln!("Launch at login: {e}");
+            }
             crate::engine::set_cache_dir(crate::bundle::gguf_cache_dir(&db));
             crate::engine::set_idle_secs(s.engine_idle_minutes * 60);
             if s.whisper_model.is_empty() {
@@ -1224,6 +1317,26 @@ fn backup_database(state: State<AppState>, path: String) -> Res<()> {
         .map_err(err)?;
     Ok(())
 }
+
+/// Dock icon set at run time: a bare binary has none, and a chatbot .app
+/// deserves its avatar. PNG or JPEG bytes.
+#[cfg(target_os = "macos")]
+pub fn set_dock_icon(bytes: &[u8]) {
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::{MainThreadMarker, NSData};
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let data = NSData::with_bytes(bytes);
+    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+        let app = NSApplication::sharedApplication(mtm);
+        unsafe { app.setApplicationIconImage(Some(&image)) };
+    }
+}
+#[cfg(not(target_os = "macos"))]
+pub fn set_dock_icon(_bytes: &[u8]) {}
+pub const ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
 
 #[cfg(test)]
 mod integration_tests {

@@ -98,6 +98,8 @@ npm run tauri build
 
 For development, `npm run desktop` starts Vite and the Tauri shell with hot reload.
 
+Under **Engines > The palette**, Langolier itself can keep an icon in the menu bar or system tray, start hidden, and launch at login, so the question bar is always one shortcut away.
+
 On macOS, `Launch-Mac.command` opens the app and starts Ollama only if the settings use it; `Stop-Ollama.command` shuts Ollama down so no model stays in memory.
 
 ### Pick an engine
@@ -142,7 +144,7 @@ Build an assistant under **Assistants**, then export it. You get a folder holdin
 
 To update a deployed bot, drop a new `.langolier` next to the launcher. It is picked up in under 30 seconds without a restart, and conversations survive.
 
-The page speaks the visitor's language, English or French, or the one pinned in the profile.
+The page speaks the visitor's language, English or French, or the one pinned in the profile. The window launcher can sit in the menu bar or system tray, start hidden, and pop a floating question bar on a global shortcut, on macOS, Windows and Linux.
 
 No file access on the target? Turn on **Remote administration** in the profile before exporting. A small gear then sits in the chat page footer: with the secret, you can import a `.langolier` from the browser, pick any earlier version from a dropdown and restore it, or delete versions you no longer need. Nothing is ever downloaded from the page, so the corpus and the API key stay on the server. The bundle the kit shipped with cannot be deleted.
 
@@ -266,6 +268,8 @@ npm run tauri build
 
 Pour développer, `npm run desktop` lance Vite et la coquille Tauri avec rechargement à chaud.
 
+Dans **Moteurs > La palette**, Langolier lui-même peut garder une icône dans la barre des menus ou la zone de notification, démarrer réduit et se lancer à l'ouverture de session : la barre de question est toujours à un raccourci.
+
 Sur macOS, `Launch-Mac.command` ouvre l'app et ne démarre Ollama que si les réglages s'en servent ; `Stop-Ollama.command` l'arrête pour qu'aucun modèle ne reste en mémoire.
 
 ### Choisir un moteur
@@ -310,7 +314,7 @@ Créez un assistant dans **Assistants**, puis exportez-le. Vous obtenez un dossi
 
 Pour mettre à jour un bot déployé, déposez un nouveau `.langolier` à côté du lanceur. Il est pris en compte en moins de 30 secondes sans redémarrage, et les conversations sont conservées.
 
-La page parle la langue du visiteur, anglais ou français, ou celle fixée dans le profil.
+La page parle la langue du visiteur, anglais ou français, ou celle fixée dans le profil. Le lanceur fenêtre peut vivre dans la barre des menus ou la zone de notification, démarrer réduit, et faire surgir une barre de question flottante sur un raccourci global, sur macOS, Windows et Linux.
 
 Pas d'accès aux fichiers sur la machine cible ? Activez **Administration à distance** dans le profil avant d'exporter. Un petit engrenage apparaît alors en pied de la page de conversation : avec le secret, vous importez un `.langolier` depuis le navigateur, choisissez n'importe quelle version précédente dans une liste pour la restaurer, ou supprimez celles qui ne servent plus. Rien n'est jamais téléchargé depuis la page, le corpus et la clé d'API restent sur le serveur. Le bundle livré avec le kit ne peut pas être supprimé.
 

@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { FR } from "./locales/fr";
 
 export type Lang = "en" | "fr";
@@ -43,6 +49,24 @@ export function LangProvider({
   children: (lang: Lang) => ReactNode;
 }) {
   const [lang, set] = useState<Lang>(current);
+  // The palette window lives on, hidden, so it must follow a switch made in
+  // the main window: storage events cover shared storage, focus covers the rest.
+  useEffect(() => {
+    const resync = () => {
+      const saved = initial();
+      if (saved !== current) {
+        current = saved;
+        document.documentElement.lang = saved;
+        set(saved);
+      }
+    };
+    window.addEventListener("storage", resync);
+    window.addEventListener("focus", resync);
+    return () => {
+      window.removeEventListener("storage", resync);
+      window.removeEventListener("focus", resync);
+    };
+  }, []);
   const setLang = (l: Lang) => {
     current = l;
     document.documentElement.lang = l;

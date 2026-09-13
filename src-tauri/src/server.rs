@@ -109,21 +109,27 @@ pub fn main(args: Args) -> i32 {
     code
 }
 #[cfg(feature = "desktop")]
+static GUI: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+#[cfg(feature = "desktop")]
+const CHAT_WINDOW: &str = "chat";
+#[cfg(feature = "desktop")]
+const PALETTE_WINDOW: &str = "palette";
+#[cfg(feature = "desktop")]
 fn gui(mut args: Args) -> i32 {
     args.host = "127.0.0.1".into();
     args.port = 0;
-    let (tx, rx) = std::sync::mpsc::channel::<Result<(String, String), String>>();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<Ready, String>>();
     let tx_err = tx.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("tokio");
-        let result = rt.block_on(serve_with(args, move |url, name| {
-            let _ = tx.send(Ok((url, name)));
+        let result = rt.block_on(serve_with(args, move |r| {
+            let _ = tx.send(Ok(r));
         }));
         if let Err(e) = result {
             let _ = tx_err.send(Err(e));
         }
     });
-    let (url, name) = match rx.recv() {
+    let ready = match rx.recv() {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             eprintln!("Error: {e}");
@@ -134,15 +140,71 @@ fn gui(mut args: Args) -> i32 {
             return 1;
         }
     };
-    let title = name.clone();
+    let r = ready.clone();
     let result = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        toggle_palette(app);
+                    }
+                })
+                .build(),
+        )
+        .on_window_event(move |window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == CHAT_WINDOW => {
+                // With a tray icon the window only hides; without one, closing quits.
+                if r.tray_icon || cfg!(target_os = "macos") {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            tauri::WindowEvent::Focused(false) if window.label() == PALETTE_WINDOW => {
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .setup(move |app| {
-            let target: tauri::Url = url.parse().map_err(std::io::Error::other)?;
-            tauri::WebviewWindowBuilder::new(app, "chat", tauri::WebviewUrl::External(target))
-                .title(&title)
-                .inner_size(560.0, 800.0)
-                .min_inner_size(380.0, 520.0)
-                .build()?;
+            let _ = GUI.set(app.handle().clone());
+            let target: tauri::Url = ready.url.parse().map_err(std::io::Error::other)?;
+            let mut chat = tauri::WebviewWindowBuilder::new(
+                app,
+                CHAT_WINDOW,
+                tauri::WebviewUrl::External(target),
+            )
+            .title(&ready.name)
+            .inner_size(560.0, 800.0)
+            .min_inner_size(380.0, 520.0)
+            .visible(!ready.start_hidden);
+            // Window icon for Windows and Linux; macOS takes the Dock icon below.
+            if let Some(icon) = app.default_window_icon() {
+                chat = chat.icon(icon.clone())?;
+            }
+            chat.build()?;
+            // Dock icon: the avatar when there is one, else Langolier's.
+            match ready.avatar.split_once(',') {
+                Some((_, b64)) => crate::desktop::set_dock_icon(&crate::bundle::base64_decode(b64)),
+                None => crate::desktop::set_dock_icon(crate::desktop::ICON_PNG),
+            }
+            if ready.tray_icon {
+                if let Err(e) = build_tray(app.handle(), &ready.name) {
+                    eprintln!("Tray: {e}");
+                }
+            }
+            if !ready.palette_shortcut.is_empty() {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                match ready
+                    .palette_shortcut
+                    .parse::<tauri_plugin_global_shortcut::Shortcut>()
+                {
+                    Ok(sc) => {
+                        if let Err(e) = app.global_shortcut().register(sc) {
+                            eprintln!("Shortcut: {e}");
+                        }
+                    }
+                    Err(e) => eprintln!("Shortcut: {e}"),
+                }
+            }
             Ok(())
         })
         .run(crate::context());
@@ -155,14 +217,129 @@ fn gui(mut args: Args) -> i32 {
         }
     }
 }
-pub async fn serve(args: Args) -> Res<()> {
-    serve_with(args, |_, _| {}).await
+#[cfg(feature = "desktop")]
+fn build_tray(app: &tauri::AppHandle, name: &str) -> Res<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    use tauri::Manager;
+    let open = MenuItemBuilder::with_id("open", format!("Open {name}"))
+        .build(app)
+        .map_err(err)?;
+    let ask = MenuItemBuilder::with_id("ask", "Ask")
+        .build(app)
+        .map_err(err)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit")
+        .build(app)
+        .map_err(err)?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&open, &ask])
+        .separator()
+        .item(&quit)
+        .build()
+        .map_err(err)?;
+    let mut builder = tauri::tray::TrayIconBuilder::with_id("chatbot")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .tooltip(name)
+        .on_menu_event(|app, e| match e.id().as_ref() {
+            "open" => {
+                if let Some(w) = app.get_webview_window(CHAT_WINDOW) {
+                    let _ = w.show();
+                    let _ = w.unminimize();
+                    let _ = w.set_focus();
+                }
+            }
+            "ask" => toggle_palette(app),
+            "quit" => {
+                crate::engine::shutdown();
+                app.exit(0)
+            }
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone()).icon_as_template(false);
+    }
+    builder.build(app).map_err(err)?;
+    Ok(())
 }
-/// ready(url, name) fires once the port is open; window mode uses it.
-pub async fn serve_with(
-    args: Args,
-    ready: impl FnOnce(String, String) + Send + 'static,
-) -> Res<()> {
+/// Floating question bar on the same page, `#palette` mode: borderless,
+/// always on top, hidden on blur or Escape.
+#[cfg(feature = "desktop")]
+fn toggle_palette(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let w = match app.get_webview_window(PALETTE_WINDOW) {
+        Some(w) => w,
+        None => {
+            let Some(chat) = app.get_webview_window(CHAT_WINDOW) else {
+                return;
+            };
+            let Ok(mut url) = chat.url() else { return };
+            url.set_fragment(Some("palette"));
+            let (width, height) = (720.0, 520.0);
+            let mut b = tauri::WebviewWindowBuilder::new(
+                app,
+                PALETTE_WINDOW,
+                tauri::WebviewUrl::External(url),
+            )
+            .title("Ask")
+            .inner_size(width, height)
+            .resizable(false)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(false);
+            if let Some(m) = app.primary_monitor().ok().flatten() {
+                let (mw, mh) = (
+                    m.size().width as f64 / m.scale_factor(),
+                    m.size().height as f64 / m.scale_factor(),
+                );
+                b = b.position((mw - width) / 2.0, (mh * 0.18).max(40.0));
+            } else {
+                b = b.center();
+            }
+            match b.build() {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("Palette: {e}");
+                    return;
+                }
+            }
+        }
+    };
+    if w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) {
+        let _ = w.hide();
+        return;
+    }
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+/// The page asks the launcher to hide the palette (Escape); loopback only.
+pub fn hide_palette_window() {
+    #[cfg(feature = "desktop")]
+    {
+        use tauri::Manager;
+        if let Some(app) = GUI.get() {
+            if let Some(w) = app.get_webview_window(PALETTE_WINDOW) {
+                let _ = w.hide();
+            }
+        }
+    }
+}
+/// What the window launcher needs to know once the server listens.
+#[derive(Clone, Default)]
+pub struct Ready {
+    pub url: String,
+    pub name: String,
+    pub avatar: String,
+    pub tray_icon: bool,
+    pub palette_shortcut: String,
+    pub start_hidden: bool,
+}
+pub async fn serve(args: Args) -> Res<()> {
+    serve_with(args, |_| {}).await
+}
+/// `ready` fires once the port is open; window mode uses it.
+pub async fn serve_with(args: Args, ready: impl FnOnce(Ready) + Send + 'static) -> Res<()> {
     let exe_dir = bundle::bundle_dir()?;
     let data_dir = match args.data {
         Some(d) => d,
@@ -272,13 +449,25 @@ pub async fn serve_with(
         port
     );
     println!("Chat page: {url}");
-    ready(
-        url.clone(),
-        profile
+    ready(Ready {
+        url: url.clone(),
+        name: profile
             .as_ref()
             .map(|a| a.name.clone())
             .unwrap_or_else(|| "Assistant".into()),
-    );
+        avatar: profile
+            .as_ref()
+            .map(|a| a.avatar.clone())
+            .unwrap_or_default(),
+        tray_icon: profile
+            .as_ref()
+            .is_some_and(|a| a.tray_icon || a.start_hidden),
+        palette_shortcut: profile
+            .as_ref()
+            .map(|a| a.palette_shortcut.trim().to_string())
+            .unwrap_or_default(),
+        start_hidden: profile.as_ref().is_some_and(|a| a.start_hidden),
+    });
     if args.open && !args.gui {
         let _ = std::process::Command::new(if cfg!(target_os = "macos") {
             "open"
@@ -629,6 +818,10 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
             json_ok(&mut w, Value::Array(rows)).await
         }
         ("POST", "/api/chat") => chat(&mut w, &req, &app).await,
+        ("POST", "/api/ui/hide") => {
+            hide_palette_window();
+            json_ok(&mut w, json!({"ok": true})).await
+        }
         _ => json_err(&mut w, "404 Not Found", "not found").await,
     }
 }

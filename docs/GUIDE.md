@@ -198,6 +198,18 @@ Endpoints, all under the `X-Admin-Token` header: `GET /api/admin/bundles`, `POST
 
 For tests or a second instance, `LANGOLIER_DISABLE_TELEGRAM=1` keeps the server from polling the bot.
 
+## Window launcher
+
+The exported window app (`chatbotgui`, or the `.app` on macOS) takes three options from the profile:
+
+- **Icon in the menu bar or system tray**, with Open, Ask and Quit. Closing the window then hides it instead of quitting.
+- **Start hidden**: no window at launch, only the icon and the shortcut.
+- **Global shortcut** for a floating question bar, the same idea as Langolier's own palette: borderless, always on top, hidden on Escape or when it loses focus. The bar keeps its own conversation, separate from the window.
+
+All three work on macOS, Windows and Linux through Tauri. On macOS the Dock icon is set at run time from the avatar, so a bare binary shows one too. On Linux the tray needs an AppIndicator-capable desktop.
+
+Langolier itself has the same three switches under **Engines > The palette**, plus **Launch at login**, which starts it hidden through a login item (`--hidden`).
+
 ## Server mode
 
 The same binary serves the chat page without a desktop environment.

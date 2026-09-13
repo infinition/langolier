@@ -44,6 +44,11 @@ pub struct Settings {
     pub ingestion_paused: bool,
     /// Minutes before the embedded engine unloads idle models; 0 keeps them.
     pub engine_idle_minutes: u64,
+    /// Icon in the menu bar or system tray, with Open, Ask and Quit.
+    pub tray_icon: bool,
+    /// Start with the window hidden; the tray icon and the shortcut remain.
+    pub start_hidden: bool,
+    pub launch_at_login: bool,
 }
 use crate::llm::EMBEDDED;
 pub const SHORTCUT: &str = "CommandOrControl+Shift+Space";
@@ -80,6 +85,9 @@ impl Default for Settings {
             active_assistant: String::new(),
             ingestion_paused: false,
             engine_idle_minutes: 5,
+            tray_icon: false,
+            start_hidden: false,
+            launch_at_login: false,
         }
     }
 }

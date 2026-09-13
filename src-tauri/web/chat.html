@@ -106,6 +106,15 @@
   dialog .status { min-height: 1.4em; font-size: 12.5px; margin-top: 12px; }
   dialog .close { margin-left: auto; }
   dialog .chosen { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Palette mode: a floating bar in a borderless, transparent window. */
+  body.palette { background: transparent; padding: 10px; }
+  body.palette header, body.palette .banner, body.palette .hint { display: none; }
+  body.palette main { order: 2; padding: 10px 0 0; }
+  body.palette footer { order: 1; border: 0; border-radius: 16px; padding: 10px; background: var(--panel); box-shadow: 0 18px 50px rgba(0,0,0,.45); border: 1px solid var(--line); }
+  body.palette .thread { padding: 0; gap: 10px; }
+  body.palette .msg .avatar { display: none; }
+  body.palette .bubble { max-width: 100%; font-size: 14px; background: var(--panel); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  body.palette textarea { min-height: 44px; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } }
   @keyframes pulse { 50% { opacity: .5; } }
   @keyframes blink { 50% { opacity: 0; } }
@@ -246,8 +255,18 @@
   applyLanguage("auto");
 
   const thread = $("thread"), q = $("q"), send = $("send"), form = $("form");
+  // #palette: the launcher's floating bar. Own conversation, Escape hides it.
+  const palette = location.hash === "#palette";
+  const CONV_KEY = palette ? "conversation-palette" : "conversation";
+  if (palette) {
+    document.body.classList.add("palette");
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); fetch("/api/ui/hide", { method: "POST" }).catch(() => {}); }
+    });
+    window.addEventListener("focus", () => q.focus());
+  }
   let config = { name: "Assistant" };
-  let conversation = localStorage.getItem("conversation") || "";
+  let conversation = localStorage.getItem(CONV_KEY) || "";
   let busy = false;
 
   const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -321,7 +340,7 @@
         for (const m of list) addMessage(m.role, m.content, m.role === "assistant" ? m.sources : null);
       } else conversation = "";
     }
-    if (!thread.children.length && config.welcome) addMessage("assistant", config.welcome);
+    if (!thread.children.length && config.welcome && !palette) addMessage("assistant", config.welcome);
   }
   async function ask(text) {
     busy = true; send.disabled = true; q.value = ""; q.style.height = "";
@@ -345,7 +364,7 @@
           const ev = /^event: (.*)$/m.exec(frame)?.[1]; const data = /^data: (.*)$/m.exec(frame)?.[1];
           if (!ev || data === undefined) continue;
           const payload = JSON.parse(data);
-          if (ev === "conversation") { conversation = payload.id; localStorage.setItem("conversation", conversation); }
+          if (ev === "conversation") { conversation = payload.id; localStorage.setItem(CONV_KEY, conversation); }
           else if (ev === "phase") phase.textContent = fromServer(payload);
           else if (ev === "token") { answer += payload; bubble.innerHTML = render(answer); bubble.appendChild(caret); scroll(); }
           else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); }
@@ -399,7 +418,7 @@
   async function applied(prefix, name) {
     sessionStorage.setItem("admin-secret", secret.value.trim());
     say(prefix + name);
-    conversation = ""; localStorage.removeItem("conversation");
+    conversation = ""; localStorage.removeItem(CONV_KEY);
     await loadConfig(); await loadHistory(); await loadHealth();
   }
   $("choose").addEventListener("click", () => $("file").click());
@@ -447,7 +466,7 @@
   form.addEventListener("submit", (e) => { e.preventDefault(); const t = q.value.trim(); if (t && !busy) ask(t); });
   q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
   q.addEventListener("input", () => { q.style.height = ""; q.style.height = Math.min(160, q.scrollHeight) + "px"; });
-  $("new").addEventListener("click", () => { conversation = ""; localStorage.removeItem("conversation"); loadHistory(); q.focus(); });
+  $("new").addEventListener("click", () => { conversation = ""; localStorage.removeItem(CONV_KEY); loadHistory(); q.focus(); });
   loadConfig().then(loadHistory).then(loadHealth).catch((e) => addMessage("assistant", T.configFailed + e));
   setInterval(loadHealth, 30000);
 })();

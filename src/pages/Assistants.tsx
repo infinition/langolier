@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { Assistant, Doc, Settings, Watch } from "../types";
 import { PROVIDERS, THEMES } from "../types";
+import { captureShortcut, formatShortcut } from "../shortcut";
 import { Button, PageHeading, Empty } from "../components/Common";
 import { confirm } from "../components/SourceEditor";
 import LibraryTree from "../components/LibraryTree";
@@ -69,6 +70,9 @@ const blank = (): Assistant => ({
   admin_import: true,
   admin_restore: true,
   language: "auto",
+  tray_icon: false,
+  palette_shortcut: "",
+  start_hidden: false,
   created: 0,
 });
 
@@ -101,6 +105,7 @@ export default function Assistants({
   >("profile");
   const [progress, setProgress] = useState("");
   const [telegramStatus, setTelegramStatus] = useState("");
+  const [capturing, setCapturing] = useState(false);
   async function checkTelegram() {
     if (!editing) return;
     setTelegramStatus(t("Checking…"));
@@ -797,6 +802,76 @@ export default function Assistants({
                 "opens another one. Caps and source privacy apply. Messages travel through Telegram, so keep it to content that may go there.",
               )}
             </p>
+            <div className="panel-heading">
+              <div>
+                <h3>{t("Window launcher")}</h3>
+                <p>{t("How the exported window app sits on the desktop")}</p>
+              </div>
+            </div>
+            <label className="check inline-check">
+              <input
+                type="checkbox"
+                checked={editing.tray_icon}
+                onChange={(e) => field("tray_icon", e.target.checked)}
+              />
+              {t("Icon in the menu bar or system tray")}
+              <small>
+                {t(
+                  "Open, Ask and Quit from the icon. Closing the window then hides it instead of quitting.",
+                )}
+              </small>
+            </label>
+            <label className="check inline-check">
+              <input
+                type="checkbox"
+                checked={editing.start_hidden}
+                onChange={(e) => {
+                  field("start_hidden", e.target.checked);
+                  if (e.target.checked) field("tray_icon", true);
+                }}
+              />
+              {t("Start hidden, in the menu bar")}
+            </label>
+            <label>
+              {t(
+                "Global shortcut for the floating question bar (empty = none)",
+              )}
+              <div className="searchbox">
+                <button
+                  type="button"
+                  className={`shortcut-capture${capturing ? " capturing" : ""}`}
+                  onClick={() => setCapturing(true)}
+                  onBlur={() => setCapturing(false)}
+                  onKeyDown={(e) => {
+                    if (!capturing) return;
+                    const accel = captureShortcut(e.nativeEvent);
+                    if (accel === null) return;
+                    e.preventDefault();
+                    if (accel) {
+                      field("palette_shortcut", accel);
+                      setCapturing(false);
+                    }
+                  }}
+                >
+                  {capturing
+                    ? t("Press the combination…")
+                    : editing.palette_shortcut
+                      ? formatShortcut(editing.palette_shortcut)
+                      : t("None")}
+                </button>
+                <Button
+                  disabled={!editing.palette_shortcut}
+                  onClick={() => field("palette_shortcut", "")}
+                >
+                  {t("Clear")}
+                </Button>
+              </div>
+              <small className="muted">
+                {t(
+                  "Like Langolier's own palette: a floating bar over any application, Esc or a click outside closes it. Works on macOS, Windows and Linux.",
+                )}
+              </small>
+            </label>
             <label>
               {t("Chat page language")}
               <select

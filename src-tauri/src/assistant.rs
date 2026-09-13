@@ -59,6 +59,11 @@ pub struct Assistant {
     pub admin_restore: bool,
     /// Chat page language: "auto" follows the browser, else "en" or "fr".
     pub language: String,
+    /// Exported window launcher: tray icon, floating palette on a global
+    /// shortcut (empty = none), start hidden in the tray.
+    pub tray_icon: bool,
+    pub palette_shortcut: String,
+    pub start_hidden: bool,
     pub created: i64,
 }
 impl Default for Assistant {
@@ -84,6 +89,9 @@ impl Default for Assistant {
             admin_import: true,
             admin_restore: true,
             language: "auto".into(),
+            tray_icon: false,
+            palette_shortcut: String::new(),
+            start_hidden: false,
             created: 0,
         }
     }
@@ -157,6 +165,18 @@ pub fn migrate(c: &rusqlite::Connection) -> Res<()> {
             "language",
             "ALTER TABLE assistants ADD COLUMN language TEXT NOT NULL DEFAULT 'auto';",
         ),
+        (
+            "tray_icon",
+            "ALTER TABLE assistants ADD COLUMN tray_icon INTEGER NOT NULL DEFAULT 0;",
+        ),
+        (
+            "palette_shortcut",
+            "ALTER TABLE assistants ADD COLUMN palette_shortcut TEXT NOT NULL DEFAULT '';",
+        ),
+        (
+            "start_hidden",
+            "ALTER TABLE assistants ADD COLUMN start_hidden INTEGER NOT NULL DEFAULT 0;",
+        ),
     ] {
         let has: i64 = c
             .query_row(
@@ -194,9 +214,12 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Assistant> {
         admin_import: r.get::<_, i64>(17)? != 0,
         admin_restore: r.get::<_, i64>(18)? != 0,
         language: r.get(19)?,
+        tray_icon: r.get::<_, i64>(20)? != 0,
+        palette_shortcut: r.get(21)?,
+        start_hidden: r.get::<_, i64>(22)? != 0,
     })
 }
-const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language";
+const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language,tray_icon,palette_shortcut,start_hidden";
 /// Constant-time check of a plaintext secret against the stored hash.
 pub fn admin_secret_matches(a: &Assistant, secret: &str) -> bool {
     let given = hash_secret(secret);
@@ -296,8 +319,8 @@ pub fn save(db: &Db, mut a: Assistant) -> Res<Assistant> {
     }
     db.conn()?
         .execute(
-            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed,admin_enabled=excluded.admin_enabled,admin_secret=excluded.admin_secret,admin_import=excluded.admin_import,admin_restore=excluded.admin_restore,language=excluded.language",
-            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim(), a.admin_enabled as i64, a.admin_secret, a.admin_import as i64, a.admin_restore as i64, a.language],
+            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language,tray_icon,palette_shortcut,start_hidden) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed,admin_enabled=excluded.admin_enabled,admin_secret=excluded.admin_secret,admin_import=excluded.admin_import,admin_restore=excluded.admin_restore,language=excluded.language,tray_icon=excluded.tray_icon,palette_shortcut=excluded.palette_shortcut,start_hidden=excluded.start_hidden",
+            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim(), a.admin_enabled as i64, a.admin_secret, a.admin_import as i64, a.admin_restore as i64, a.language, a.tray_icon as i64, a.palette_shortcut.trim(), a.start_hidden as i64],
         )
         .map_err(err)?;
     Ok(a)

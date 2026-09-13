@@ -442,8 +442,8 @@ pub fn store_import(data_dir: &Path, bytes: &[u8]) -> Res<String> {
     install(bytes, data_dir)?;
     Ok(a.name)
 }
-#[cfg(target_os = "macos")]
-fn base64_decode(s: &str) -> Vec<u8> {
+#[cfg(any(target_os = "macos", feature = "desktop"))]
+pub fn base64_decode(s: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.len() * 3 / 4);
     let mut buf = 0u32;
     let mut bits = 0;
