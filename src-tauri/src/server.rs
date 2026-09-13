@@ -596,7 +596,7 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
         ("GET", "/api/config") => {
             let s = app.db.settings()?;
             let a = assistant::get(&app.db, &s.active_assistant)?.unwrap_or_default();
-            json_ok(&mut w, json!({"name": a.name, "welcome": a.welcome, "avatar": a.avatar, "theme": a.theme, "show_sources": a.show_sources, "admin": {"enabled": a.admin_enabled, "import": a.admin_enabled && a.admin_import, "restore": a.admin_enabled && a.admin_restore}})).await
+            json_ok(&mut w, json!({"name": a.name, "welcome": a.welcome, "avatar": a.avatar, "theme": a.theme, "show_sources": a.show_sources, "language": a.language, "admin": {"enabled": a.admin_enabled, "import": a.admin_enabled && a.admin_import, "restore": a.admin_enabled && a.admin_restore}})).await
         }
         ("GET", "/api/health") => {
             let s = app.db.settings()?;

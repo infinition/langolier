@@ -68,6 +68,7 @@ const blank = (): Assistant => ({
   admin_secret_set: false,
   admin_import: true,
   admin_restore: true,
+  language: "auto",
   created: 0,
 });
 
@@ -796,6 +797,24 @@ export default function Assistants({
                 "opens another one. Caps and source privacy apply. Messages travel through Telegram, so keep it to content that may go there.",
               )}
             </p>
+            <label>
+              {t("Chat page language")}
+              <select
+                value={editing.language}
+                onChange={(e) => field("language", e.target.value)}
+              >
+                <option value="auto">
+                  {t("Follow the visitor's browser")}
+                </option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+              </select>
+              <small className="muted">
+                {t(
+                  "Buttons, placeholders and notices of the exported chatbot page. The assistant's own answers follow its mission and the question.",
+                )}
+              </small>
+            </label>
             <div className="panel-heading">
               <div>
                 <h3>{t("Remote administration")}</h3>

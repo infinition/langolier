@@ -844,4 +844,8 @@ export const FR: Record<string, string> = {
   "This file is not a valid zip archive.":
     "Ce fichier n’est pas une archive zip valide.",
   "Empty Whisper transcription": "Transcription Whisper vide",
+  "Chat page language": "Langue de la page de conversation",
+  "Follow the visitor's browser": "Suivre le navigateur du visiteur",
+  "Buttons, placeholders and notices of the exported chatbot page. The assistant's own answers follow its mission and the question.":
+    "Boutons, textes d’aide et messages de la page du chatbot exporté. Les réponses de l’assistant suivent sa mission et la question posée.",
 };

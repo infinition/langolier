@@ -47,6 +47,7 @@ export interface Assistant {
   admin_secret_set: boolean;
   admin_import: boolean;
   admin_restore: boolean;
+  language: string;
   created: number;
 }
 export interface EmbedModel {

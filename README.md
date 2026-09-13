@@ -142,6 +142,8 @@ Build an assistant under **Assistants**, then export it. You get a folder holdin
 
 To update a deployed bot, drop a new `.langolier` next to the launcher. It is picked up in under 30 seconds without a restart, and conversations survive.
 
+The page speaks the visitor's language, English or French, or the one pinned in the profile.
+
 No file access on the target? Turn on **Remote administration** in the profile before exporting. A small gear then sits in the chat page footer: with the secret, you can import a `.langolier` from the browser, pick any earlier version from a dropdown and restore it, or delete versions you no longer need. Nothing is ever downloaded from the page, so the corpus and the API key stay on the server. The bundle the kit shipped with cannot be deleted.
 
 ### Run a chatbot in Docker
@@ -307,6 +309,8 @@ Créez un assistant dans **Assistants**, puis exportez-le. Vous obtenez un dossi
 ```
 
 Pour mettre à jour un bot déployé, déposez un nouveau `.langolier` à côté du lanceur. Il est pris en compte en moins de 30 secondes sans redémarrage, et les conversations sont conservées.
+
+La page parle la langue du visiteur, anglais ou français, ou celle fixée dans le profil.
 
 Pas d'accès aux fichiers sur la machine cible ? Activez **Administration à distance** dans le profil avant d'exporter. Un petit engrenage apparaît alors en pied de la page de conversation : avec le secret, vous importez un `.langolier` depuis le navigateur, choisissez n'importe quelle version précédente dans une liste pour la restaurer, ou supprimez celles qui ne servent plus. Rien n'est jamais téléchargé depuis la page, le corpus et la clé d'API restent sur le serveur. Le bundle livré avec le kit ne peut pas être supprimé.
 

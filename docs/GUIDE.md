@@ -173,6 +173,8 @@ An exported cloud profile carries its API key inside the bundle in clear text. T
 
 An exported chatbot can be updated from its own page, for hosts where dropping a file is impractical: a NAS, a VPS, a Docker volume mounted read only.
 
+The profile also pins the **chat page language**: follow the visitor's browser (default), English, or French. Buttons, notices, admin dialog and the messages the server sends (search phases, health notices, errors) all follow it.
+
 Turn it on in the profile before exporting: **Remote administration**, a secret of at least 12 characters (the Generate button makes one), and two switches for import and restore. The secret is stored as a SHA-256 hash, both in the app and in the bundle; it is shown once.
 
 On the chat page a small gear appears in the footer. With the secret:

@@ -57,6 +57,8 @@ pub struct Assistant {
     pub admin_secret_set: bool,
     pub admin_import: bool,
     pub admin_restore: bool,
+    /// Chat page language: "auto" follows the browser, else "en" or "fr".
+    pub language: String,
     pub created: i64,
 }
 impl Default for Assistant {
@@ -81,6 +83,7 @@ impl Default for Assistant {
             admin_secret_set: false,
             admin_import: true,
             admin_restore: true,
+            language: "auto".into(),
             created: 0,
         }
     }
@@ -150,6 +153,10 @@ pub fn migrate(c: &rusqlite::Connection) -> Res<()> {
             "admin_restore",
             "ALTER TABLE assistants ADD COLUMN admin_restore INTEGER NOT NULL DEFAULT 1;",
         ),
+        (
+            "language",
+            "ALTER TABLE assistants ADD COLUMN language TEXT NOT NULL DEFAULT 'auto';",
+        ),
     ] {
         let has: i64 = c
             .query_row(
@@ -186,9 +193,10 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Assistant> {
         admin_secret_set: !r.get::<_, String>(16)?.is_empty(),
         admin_import: r.get::<_, i64>(17)? != 0,
         admin_restore: r.get::<_, i64>(18)? != 0,
+        language: r.get(19)?,
     })
 }
-const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore";
+const COLS: &str = "id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language";
 /// Constant-time check of a plaintext secret against the stored hash.
 pub fn admin_secret_matches(a: &Assistant, secret: &str) -> bool {
     let given = hash_secret(secret);
@@ -275,6 +283,9 @@ pub fn save(db: &Db, mut a: Assistant) -> Res<Assistant> {
         }
         hash_secret(&a.admin_secret)
     };
+    if !matches!(a.language.as_str(), "auto" | "en" | "fr") {
+        a.language = "auto".into();
+    }
     if a.admin_enabled && a.admin_secret.is_empty() {
         return Err("Remote administration needs a secret.".into());
     }
@@ -285,8 +296,8 @@ pub fn save(db: &Db, mut a: Assistant) -> Res<Assistant> {
     }
     db.conn()?
         .execute(
-            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed,admin_enabled=excluded.admin_enabled,admin_secret=excluded.admin_secret,admin_import=excluded.admin_import,admin_restore=excluded.admin_restore",
-            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim(), a.admin_enabled as i64, a.admin_secret, a.admin_import as i64, a.admin_restore as i64],
+            "INSERT INTO assistants(id,name,mission,welcome,avatar,theme,scope,overrides,created,show_sources,hide_source_names,max_conversation_tokens,daily_token_budget,telegram_token,telegram_allowed,admin_enabled,admin_secret,admin_import,admin_restore,language) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mission=excluded.mission,welcome=excluded.welcome,avatar=excluded.avatar,theme=excluded.theme,scope=excluded.scope,overrides=excluded.overrides,show_sources=excluded.show_sources,hide_source_names=excluded.hide_source_names,max_conversation_tokens=excluded.max_conversation_tokens,daily_token_budget=excluded.daily_token_budget,telegram_token=excluded.telegram_token,telegram_allowed=excluded.telegram_allowed,admin_enabled=excluded.admin_enabled,admin_secret=excluded.admin_secret,admin_import=excluded.admin_import,admin_restore=excluded.admin_restore,language=excluded.language",
+            params![a.id, a.name, a.mission, a.welcome, a.avatar, a.theme, a.scope.to_string(), a.overrides.to_string(), if a.created == 0 { now() } else { a.created }, a.show_sources as i64, a.hide_source_names as i64, a.max_conversation_tokens.max(0), a.daily_token_budget.max(0), a.telegram_token.trim(), a.telegram_allowed.trim(), a.admin_enabled as i64, a.admin_secret, a.admin_import as i64, a.admin_restore as i64, a.language],
         )
         .map_err(err)?;
     Ok(a)

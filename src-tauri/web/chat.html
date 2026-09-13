@@ -105,6 +105,7 @@
   dialog .row button { padding: 9px 14px; font-size: 13px; }
   dialog .status { min-height: 1.4em; font-size: 12.5px; margin-top: 12px; }
   dialog .close { margin-left: auto; }
+  dialog .chosen { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } }
   @keyframes pulse { 50% { opacity: .5; } }
   @keyframes blink { 50% { opacity: 0; } }
@@ -136,8 +137,12 @@
     <input id="secret" type="password" autocomplete="off" />
   </section>
   <section id="import-section" hidden>
-    <label for="file" id="import-label"></label>
-    <input id="file" type="file" accept=".langolier" />
+    <label id="import-label"></label>
+    <input id="file" type="file" accept=".langolier" hidden />
+    <div class="row">
+      <button id="choose" class="ghost" type="button"></button>
+      <span id="chosen" class="chosen"></span>
+    </div>
     <div class="row"><button id="import" type="button"></button></div>
   </section>
   <section id="restore-section" hidden>
@@ -154,9 +159,9 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const fr = (navigator.language || "").toLowerCase().startsWith("fr");
-  document.documentElement.lang = fr ? "fr" : "en";
-  const T = fr ? {
+  let fr = (navigator.language || "").toLowerCase().startsWith("fr");
+  let T;
+  const STRINGS = (fr) => fr ? {
     new: "Nouvelle conversation", ask: "Posez votre question…", send: "Envoyer", connecting: "Connexion…",
     error: "Erreur", none: "Aucune réponse reçue.", configFailed: "Impossible de charger la configuration : ",
     grounded: "Réponses fondées uniquement sur les connaissances de cet assistant.",
@@ -168,6 +173,7 @@
     uploading: "Envoi…", working: "En cours…", imported: "Importé : ", restored: "Restauré : ", deleted: "Supprimé.",
     confirmDelete: "Supprimer cette version ? Elle ne pourra plus être restaurée.",
     forceAsk: "Continuer quand même, avec la recherche par mots seulement ?",
+    choose: "Choisir un fichier…", noFile: "Aucun fichier choisi", adminTip: "Administration",
   } : {
     new: "New conversation", ask: "Ask your question…", send: "Send", connecting: "Connecting…",
     error: "Error", none: "No answer received.", configFailed: "Could not load the configuration: ",
@@ -180,11 +186,64 @@
     uploading: "Uploading…", working: "Working…", imported: "Imported: ", restored: "Restored: ", deleted: "Deleted.",
     confirmDelete: "Delete this version? It cannot be restored afterwards.",
     forceAsk: "Continue anyway, with word search only?",
+    choose: "Choose a file…", noFile: "No file chosen", adminTip: "Administration",
   };
-  for (const [id, key] of [["new", "new"], ["send", "send"], ["admin-title", "adminTitle"], ["admin-intro", "adminIntro"],
-    ["secret-label", "secret"], ["import-label", "importLabel"], ["import", "importBtn"], ["restore-label", "restoreLabel"],
-    ["restore", "restoreBtn"], ["delete", "deleteBtn"], ["admin-close", "close"]]) $(id).textContent = T[key];
-  $("q").placeholder = T.ask;
+  // Messages the server sends in English: phases, health notices, errors.
+  const SERVER_FR = [
+    ["Searching your memory", "Recherche dans votre mémoire"],
+    ["Writing the answer", "Rédaction de la réponse"],
+    ["Verifying the answer", "Vérification de la réponse"],
+    ["Wrong secret.", "Mauvais secret."],
+    ["Too many wrong secrets. Try again in a few minutes.", "Trop de mauvais secrets. Réessayez dans quelques minutes."],
+    ["Import is disabled for this chatbot.", "L’import est désactivé pour ce chatbot."],
+    ["Restore is disabled for this chatbot.", "La restauration est désactivée pour ce chatbot."],
+    ["The bundle the kit shipped with cannot be deleted.", "Le bundle livré avec le kit ne peut pas être supprimé."],
+    ["This bundle is the one running. Restore another one first.", "Ce bundle est celui en cours. Restaurez-en un autre d’abord."],
+    ["Unknown bundle.", "Bundle inconnu."],
+    ["Invalid bundle id.", "Identifiant de bundle invalide."],
+    ["Upload cut short.", "Envoi interrompu."],
+    ["This file is not a Langolier bundle.", "Ce fichier n’est pas un bundle Langolier."],
+    ["Expected a JSON body with an id.", "Requête invalide."],
+    ["not found", "introuvable"],
+    ["empty question", "question vide"],
+    ["This conversation has reached its limit. Open a new one to continue.", "Cette conversation a atteint sa limite. Ouvrez-en une nouvelle pour continuer."],
+    ["This assistant's daily quota is spent. Try again tomorrow.", "Le quota quotidien de cet assistant est atteint. Réessayez demain."],
+    ["The model returned an empty answer.", "Le modèle a renvoyé une réponse vide."],
+    ["Engine stream cut short; answer not saved.", "Flux du moteur interrompu ; réponse non enregistrée."],
+    ["A generation is already running", "Une génération est déjà en cours"],
+    [/^This bundle needs an embedding model that is not available here: (.*) Send again with force=1 to accept word search only\.$/, "Ce bundle a besoin d’un modèle d’embeddings absent ici : $1"],
+    [/^A bundle must be between 1 byte and (\d+) MB\.$/, "Un bundle doit faire entre 1 octet et $1 Mo."],
+    [/^A bundle must hold exactly one profile, this one holds (\d+)\.$/, "Un bundle doit contenir un seul profil, celui-ci en contient $1."],
+    [/^Chat model missing: (.*) \(expected in the models\/ folder\)\.$/, "Modèle de conversation absent : $1 (attendu dans le dossier models/)."],
+    [/^Embedding model missing: (.*) - word search only\.$/, "Modèle d’embeddings absent : $1, recherche par mots seulement."],
+    [/^Chat model "(.*)" missing from Ollama: (.*)$/, "Modèle de conversation « $1 » absent d’Ollama : $2"],
+    [/^Embedding model "(.*)" missing from Ollama: (.*) - word search only until then\.$/, "Modèle d’embeddings « $1 » absent d’Ollama : $2, recherche par mots seulement en attendant."],
+    [/^Ollama is not answering on (.*): answers will fail until it starts\.$/, "Ollama ne répond pas sur $1 : les réponses échoueront jusqu’à son démarrage."],
+    [/^Ollama is not answering on (.*): word search only\.$/, "Ollama ne répond pas sur $1 : recherche par mots seulement."],
+    [/^Chat model not downloaded: (.*)\. Install it from the Engines page\.$/, "Modèle de conversation non téléchargé : $1."],
+    [/^Sorry, something went wrong: (.*)$/, "Désolé, une erreur est survenue : $1"],
+  ];
+  const fromServer = (s) => {
+    if (!fr || typeof s !== "string") return s;
+    for (const [en, out] of SERVER_FR) {
+      if (en instanceof RegExp) { if (en.test(s)) return s.replace(en, out); }
+      else if (s === en) return out;
+    }
+    return s;
+  };
+  // The profile may pin the page language; otherwise the browser decides.
+  function applyLanguage(pinned) {
+    if (pinned === "en" || pinned === "fr") fr = pinned === "fr";
+    T = STRINGS(fr);
+    document.documentElement.lang = fr ? "fr" : "en";
+    for (const [id, key] of [["new", "new"], ["send", "send"], ["admin-title", "adminTitle"], ["admin-intro", "adminIntro"],
+      ["secret-label", "secret"], ["import-label", "importLabel"], ["import", "importBtn"], ["restore-label", "restoreLabel"],
+      ["restore", "restoreBtn"], ["delete", "deleteBtn"], ["admin-close", "close"], ["choose", "choose"]]) $(id).textContent = T[key];
+    $("q").placeholder = T.ask;
+    $("gear").title = T.adminTip;
+    if (!$("file").files.length) $("chosen").textContent = T.noFile;
+  }
+  applyLanguage("auto");
 
   const thread = $("thread"), q = $("q"), send = $("send"), form = $("form");
   let config = { name: "Assistant" };
@@ -229,6 +288,7 @@
 
   async function loadConfig() {
     const r = await fetch("/api/config"); config = await r.json();
+    applyLanguage(config.language || "auto");
     document.documentElement.dataset.theme = config.theme || "nuit";
     document.title = config.name;
     $("name").textContent = config.name;
@@ -246,7 +306,7 @@
       const r = await fetch("/api/health"); const h = await r.json();
       const b = $("banner");
       if (h.problems && h.problems.length) {
-        b.innerHTML = (h.degraded ? "⚠︎ " : "✖ ") + h.problems.map(escapeHtml).join("<br>").replace(/`([^`]+)`/g, "<code>$1</code>");
+        b.innerHTML = (h.degraded ? "⚠︎ " : "✖ ") + h.problems.map((x) => escapeHtml(fromServer(x))).join("<br>").replace(/`([^`]+)`/g, "<code>$1</code>");
         b.classList.add("show");
       } else b.classList.remove("show");
     } catch (e) { /* the page stays usable */ }
@@ -286,10 +346,10 @@
           if (!ev || data === undefined) continue;
           const payload = JSON.parse(data);
           if (ev === "conversation") { conversation = payload.id; localStorage.setItem("conversation", conversation); }
-          else if (ev === "phase") phase.textContent = payload;
+          else if (ev === "phase") phase.textContent = fromServer(payload);
           else if (ev === "token") { answer += payload; bubble.innerHTML = render(answer); bubble.appendChild(caret); scroll(); }
           else if (ev === "done") { bubble.innerHTML = render(payload.content); if (config.show_sources !== false && payload.sources?.length) bubble.appendChild(sourcesNode(payload.sources)); }
-          else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(payload.error || T.error)}</span>`; }
+          else if (ev === "error") { bubble.innerHTML = `<span class="error">${escapeHtml(fromServer(payload.error) || T.error)}</span>`; }
         }
       }
       if (!answer && !bubble.textContent.trim()) bubble.textContent = T.none;
@@ -328,7 +388,7 @@
   async function call(path, init) {
     const r = await fetch(path, { ...init, headers: { ...headers(), ...(init?.headers || {}) } });
     const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || r.statusText);
+    if (!r.ok) throw new Error(fromServer(body.error) || r.statusText);
     return body;
   }
   async function refresh() {
@@ -342,6 +402,8 @@
     conversation = ""; localStorage.removeItem("conversation");
     await loadConfig(); await loadHistory(); await loadHealth();
   }
+  $("choose").addEventListener("click", () => $("file").click());
+  $("file").addEventListener("change", () => { const f = $("file").files[0]; $("chosen").textContent = f ? f.name : T.noFile; });
   $("gear").addEventListener("click", () => { say(""); dlg.showModal(); if (secret.value) refresh().catch((e) => say(e.message, true)); });
   $("admin-close").addEventListener("click", () => dlg.close());
   secret.addEventListener("change", () => refresh().catch((e) => say(e.message, true)));
@@ -355,10 +417,10 @@
       let r;
       try { r = await send(false); }
       catch (e) {
-        if (!/force=1/.test(e.message) || !confirm(`${e.message}\n\n${T.forceAsk}`)) throw e;
+        if (!/(force=1|embeddings absent ici)/.test(e.message) || !confirm(`${e.message}\n\n${T.forceAsk}`)) throw e;
         r = await send(true);
       }
-      fill(r.list); $("file").value = "";
+      fill(r.list); $("file").value = ""; $("chosen").textContent = T.noFile;
       await applied(T.imported, r.name);
     } catch (e) { say(e.message, true); }
   });
