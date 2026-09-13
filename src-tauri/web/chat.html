@@ -106,15 +106,25 @@
   dialog .status { min-height: 1.4em; font-size: 12.5px; margin-top: 12px; }
   dialog .close { margin-left: auto; }
   dialog .chosen { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Palette mode: a floating bar in a borderless, transparent window. */
-  body.palette { background: transparent; padding: 10px; }
+  /* Palette mode: a floating bar in a borderless, transparent window. The
+     bar and the thread share one frosted material; the desktop shows through. */
+  body.palette { background: transparent; padding: 10px; gap: 10px; }
   body.palette header, body.palette .banner, body.palette .hint { display: none; }
-  body.palette main { order: 2; padding: 10px 0 0; }
-  body.palette footer { order: 1; border: 0; border-radius: 16px; padding: 10px; background: var(--panel); box-shadow: 0 18px 50px rgba(0,0,0,.45); border: 1px solid var(--line); }
-  body.palette .thread { padding: 0; gap: 10px; }
+  body.palette footer, body.palette main {
+    background: rgba(22, 22, 24, 0.62); border: 1px solid rgba(255,255,255,.12); border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+    backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  }
+  body.palette footer { order: 1; padding: 10px; }
+  body.palette main { order: 2; flex: 0 1 auto; padding: 14px 0; }
+  body.palette main:empty, body.palette main:has(.thread:empty) { display: none; }
+  body.palette .thread { gap: 12px; }
   body.palette .msg .avatar { display: none; }
-  body.palette .bubble { max-width: 100%; font-size: 14px; background: var(--panel); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
-  body.palette textarea { min-height: 44px; }
+  body.palette .msg.user .bubble { background: rgba(230,160,107,.2); border-color: rgba(230,160,107,.42); color: var(--text); }
+  body.palette .msg.assistant .bubble { max-width: 94%; background: rgba(10,10,12,.55); border-color: rgba(255,255,255,.1); box-shadow: 0 10px 30px rgba(0,0,0,.3); color: #f1f1f2; }
+  body.palette .sources { border-top-color: rgba(255,255,255,.12); color: rgba(241,241,242,.55); }
+  body.palette textarea { min-height: 44px; background: transparent; border-color: transparent; font-size: 17px; }
+  body.palette textarea:focus { border-color: transparent; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } }
   @keyframes pulse { 50% { opacity: .5; } }
   @keyframes blink { 50% { opacity: 0; } }

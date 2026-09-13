@@ -2793,7 +2793,7 @@ html.palette-mode #root {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 14px 20px;
   opacity: 0;
   transition: opacity 0.18s;
@@ -2801,21 +2801,25 @@ html.palette-mode #root {
 .palette-root.open {
   opacity: 1;
 }
-.palette-bar {
+/* Bar and thread share one frosted material; the desktop shows through. */
+.palette-bar,
+.palette-thread {
   width: 100%;
   max-width: 720px;
+  background: rgba(22, 22, 24, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+}
+.palette-bar {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 16px 22px;
   border-radius: 18px;
-  background: rgba(20, 23, 18, 0.86);
-  border: 1px solid rgba(215, 249, 138, 0.28);
-  box-shadow:
-    0 24px 70px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   transform: translateY(-14px) scale(0.97);
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
@@ -2832,7 +2836,7 @@ html.palette-mode #root {
   padding: 4px 0;
 }
 .palette-bar input::placeholder {
-  color: #756f69;
+  color: rgba(241, 241, 242, 0.42);
 }
 .palette-icon {
   color: var(--lime);
@@ -2845,33 +2849,34 @@ html.palette-mode #root {
   }
 }
 .palette-hint {
-  color: #756f69;
+  color: rgba(241, 241, 242, 0.42);
   display: flex;
 }
 .palette-thread {
-  width: 100%;
-  max-width: 720px;
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 2px 4px 8px;
+  gap: 14px;
+  padding: 18px 18px 16px;
+  border-radius: 20px;
   scrollbar-width: thin;
+  animation: bubble-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 .palette-turn {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+/* Bubbles sit on the glass: light for the question, dark for the answer. */
 .palette-user {
   align-self: flex-end;
   max-width: 80%;
   padding: 9px 14px;
   border-radius: 16px 16px 4px 16px;
-  background: rgba(215, 249, 138, 0.16);
-  border: 1px solid rgba(215, 249, 138, 0.35);
+  background: rgba(230, 160, 107, 0.2);
+  border: 1px solid rgba(230, 160, 107, 0.42);
   color: var(--cream);
   font-size: 13.5px;
   line-height: 1.5;
@@ -2880,21 +2885,19 @@ html.palette-mode #root {
 }
 .palette-bubble {
   align-self: flex-start;
-  max-width: 92%;
-  padding: 16px 20px 14px;
-  border-radius: 20px 20px 20px 6px;
-  background: rgba(24, 28, 22, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  max-width: 94%;
+  padding: 14px 18px 13px;
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(10, 10, 12, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   animation: bubble-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.15);
   transform-origin: top left;
 }
 @keyframes bubble-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.94);
+    transform: translateY(-8px) scale(0.96);
   }
 }
 .palette-answer {
@@ -2908,24 +2911,37 @@ html.palette-mode #root {
 .palette-answer :last-child {
   margin-bottom: 0;
 }
+.palette-answer code {
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 .palette-phase {
   margin: 0;
   color: var(--lime);
   font-size: 13px;
-  animation: shimmer 1.6s infinite;
+  animation: pulse-text 1.6s infinite;
+}
+@keyframes pulse-text {
+  50% {
+    opacity: 0.45;
+  }
 }
 .palette-error {
   margin: 0;
-  color: var(--orange);
+  color: var(--danger);
   font-size: 13px;
 }
 .palette-sources {
   margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
   display: flex;
   flex-wrap: wrap;
   gap: 6px 14px;
   font-size: 10.5px;
-  color: #b99a7f;
+  color: rgba(241, 241, 242, 0.55);
 }
 .caret {
   display: inline-block;

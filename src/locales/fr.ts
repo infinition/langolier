@@ -866,4 +866,5 @@ export const FR: Record<string, string> = {
   "Launch at login": "Lancer à l’ouverture de session",
   "Starts hidden at login, so the palette is always one shortcut away.":
     "Démarre réduit à l’ouverture de session : la palette est toujours à un raccourci.",
+  "Go on…": "Poursuivez…",
 };

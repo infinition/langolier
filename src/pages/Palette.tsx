@@ -136,7 +136,7 @@ export default function Palette() {
           ref={input}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={turns.length ? "Poursuivez…" : t("Ask your memory…")}
+          placeholder={turns.length ? t("Go on…") : t("Ask your memory…")}
           autoFocus
           spellCheck={false}
           onKeyDown={(e) => {
