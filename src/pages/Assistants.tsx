@@ -16,8 +16,12 @@ import {
 } from "lucide-react";
 import type { Assistant, Doc, Settings, Watch } from "../types";
 import { PROVIDERS, THEMES } from "../types";
-import { captureShortcut, formatShortcut } from "../shortcut";
-import { Button, PageHeading, Empty } from "../components/Common";
+import {
+  Button,
+  PageHeading,
+  Empty,
+  ShortcutCapture,
+} from "../components/Common";
 import { confirm } from "../components/SourceEditor";
 import LibraryTree from "../components/LibraryTree";
 import ApiKeyField from "../components/ApiKeyField";
@@ -105,7 +109,6 @@ export default function Assistants({
   >("profile");
   const [progress, setProgress] = useState("");
   const [telegramStatus, setTelegramStatus] = useState("");
-  const [capturing, setCapturing] = useState(false);
   async function checkTelegram() {
     if (!editing) return;
     setTelegramStatus(t("Checking…"));
@@ -837,28 +840,10 @@ export default function Assistants({
                 "Global shortcut for the floating question bar (empty = none)",
               )}
               <div className="searchbox">
-                <button
-                  type="button"
-                  className={`shortcut-capture${capturing ? " capturing" : ""}`}
-                  onClick={() => setCapturing(true)}
-                  onBlur={() => setCapturing(false)}
-                  onKeyDown={(e) => {
-                    if (!capturing) return;
-                    const accel = captureShortcut(e.nativeEvent);
-                    if (accel === null) return;
-                    e.preventDefault();
-                    if (accel) {
-                      field("palette_shortcut", accel);
-                      setCapturing(false);
-                    }
-                  }}
-                >
-                  {capturing
-                    ? t("Press the combination…")
-                    : editing.palette_shortcut
-                      ? formatShortcut(editing.palette_shortcut)
-                      : t("None")}
-                </button>
+                <ShortcutCapture
+                  value={editing.palette_shortcut}
+                  onChange={(accel) => field("palette_shortcut", accel)}
+                />
                 <Button
                   disabled={!editing.palette_shortcut}
                   onClick={() => field("palette_shortcut", "")}

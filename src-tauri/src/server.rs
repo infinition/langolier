@@ -207,7 +207,23 @@ fn gui(mut args: Args) -> i32 {
             }
             Ok(())
         })
-        .run(crate::context());
+        .build(crate::context())
+        .map(|app| {
+            app.run(|app, event| {
+                // Dock click while the window is hidden.
+                #[cfg(target_os = "macos")]
+                if let tauri::RunEvent::Reopen { .. } = event {
+                    use tauri::Manager;
+                    if let Some(w) = app.get_webview_window(CHAT_WINDOW) {
+                        let _ = w.show();
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = (app, event);
+            })
+        });
     crate::engine::shutdown();
     match result {
         Ok(()) => 0,

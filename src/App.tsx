@@ -235,6 +235,8 @@ export default function App() {
   }, [toast]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.(".shortcut-capture"))
+        return;
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setImportTab("files");

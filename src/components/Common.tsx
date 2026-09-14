@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { t } from "../i18n";
+import { api, desktop } from "../api";
+import { captureShortcut, formatShortcut } from "../shortcut";
 import { Library, X, FileText, ArrowUpRight, Copy, Check } from "lucide-react";
 import type { Source } from "../types";
 export function Logo({ small = false }: { small?: boolean }) {
@@ -188,6 +190,58 @@ export function CopyButton({
             ? t("Copy failed")
             : t("Copy")}
       </span>
+    </button>
+  );
+}
+
+// Key recorder for a global shortcut. Takes focus itself, since WebKit does
+// not focus a clicked button, and pauses the live shortcut while recording.
+export function ShortcutCapture({
+  value,
+  onChange,
+  empty,
+}: {
+  value: string;
+  onChange: (accel: string) => void;
+  empty?: string;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  const pause = (paused: boolean) => {
+    if (desktop) void api("pause_shortcut", { paused }).catch(() => {});
+  };
+  return (
+    <button
+      type="button"
+      className={`shortcut-capture${capturing ? " capturing" : ""}`}
+      onClick={(e) => {
+        e.currentTarget.focus();
+        setCapturing(true);
+        pause(true);
+      }}
+      onBlur={() => {
+        setCapturing(false);
+        pause(false);
+      }}
+      onKeyDown={(e) => {
+        if (!capturing) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.currentTarget.blur();
+          return;
+        }
+        const accel = captureShortcut(e.nativeEvent);
+        if (accel) {
+          onChange(accel);
+          e.currentTarget.blur();
+        }
+      }}
+    >
+      {capturing
+        ? t("Press the combination…")
+        : value
+          ? formatShortcut(value)
+          : empty || t("None")}
     </button>
   );
 }

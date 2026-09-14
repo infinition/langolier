@@ -414,3 +414,32 @@ pub fn persona(a: Option<&Assistant>) -> String {
         None => "You are Langolier.\n\n".into(),
     }
 }
+
+#[cfg(test)]
+mod launcher_tests {
+    use super::*;
+    #[test]
+    fn launcher_fields_round_trip() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Db::new(root.path()).unwrap();
+        let a = save(
+            &db,
+            Assistant {
+                name: "Bot".into(),
+                tray_icon: true,
+                palette_shortcut: "CommandOrControl+Shift+K".into(),
+                start_hidden: true,
+                language: "fr".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let back = get(&db, &a.id).unwrap().unwrap();
+        assert!(back.tray_icon && back.start_hidden);
+        assert_eq!(back.palette_shortcut, "CommandOrControl+Shift+K");
+        assert_eq!(back.language, "fr");
+        // A second save with the fields untouched keeps them.
+        let again = save(&db, back.clone()).unwrap();
+        assert!(again.tray_icon && again.start_hidden);
+    }
+}

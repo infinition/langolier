@@ -27,7 +27,7 @@ import {
   CHAT_MODELS,
 } from "../types";
 import { formatShortcut, captureShortcut } from "../shortcut";
-import { Button, PageHeading } from "../components/Common";
+import { Button, PageHeading, ShortcutCapture } from "../components/Common";
 import ApiKeyField from "../components/ApiKeyField";
 import ReindexModal from "../components/ReindexModal";
 import type { Doc } from "../types";
@@ -135,7 +135,6 @@ export default function EngineSettings({
   }
   const embeddingCount = settings.embedding_model;
   const provider = PROVIDERS.find((p) => p.id === s.provider);
-  const [capturing, setCapturing] = useState(false);
   return (
     <main className="content-page">
       {reindexing && (
@@ -563,26 +562,10 @@ export default function EngineSettings({
           </div>
           <label>
             {t("Global shortcut")}
-            <button
-              type="button"
-              className={`shortcut-capture${capturing ? " capturing" : ""}`}
-              onClick={() => setCapturing(true)}
-              onBlur={() => setCapturing(false)}
-              onKeyDown={(e) => {
-                if (!capturing) return;
-                const accel = captureShortcut(e.nativeEvent);
-                if (accel === null) return;
-                e.preventDefault();
-                if (accel) {
-                  field("shortcut", accel);
-                  setCapturing(false);
-                }
-              }}
-            >
-              {capturing
-                ? t("Press the combination…")
-                : formatShortcut(s.shortcut)}
-            </button>
+            <ShortcutCapture
+              value={s.shortcut}
+              onChange={(accel) => field("shortcut", accel)}
+            />
           </label>
           <p className="field-help">
             {t(

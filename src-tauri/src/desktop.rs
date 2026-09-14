@@ -146,9 +146,18 @@ fn register_shortcut(app: &tauri::AppHandle, accel: &str) -> Res<()> {
     gs.unregister_all().map_err(err)?;
     let shortcut: Shortcut = accel
         .parse()
-        .map_err(|e| format!("Raccourci invalide : {e}"))?;
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
     gs.register(shortcut)
-        .map_err(|e| format!("Raccourci indisponible ({accel}) : {e}"))
+        .map_err(|e| format!("Shortcut unavailable ({accel}): {e}"))
+}
+/// While a recorder captures keys, the global shortcut must not fire.
+#[tauri::command]
+fn pause_shortcut(app: tauri::AppHandle, state: State<AppState>, paused: bool) -> Res<()> {
+    if paused {
+        app.global_shortcut().unregister_all().map_err(err)
+    } else {
+        register_shortcut(&app, &state.db.settings()?.shortcut)
+    }
 }
 const PALETTE: &str = "palette";
 /// Borderless floating window, created once then shown or hidden.
@@ -1247,6 +1256,7 @@ pub fn run() {
             scan_watch,
             open_palette,
             hide_palette,
+            pause_shortcut,
             messages,
             feedback,
             cancel_chat,
