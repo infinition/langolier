@@ -1274,6 +1274,9 @@ nav button:hover {
 .doc-status.error > span {
   color: #dcb086;
 }
+.doc-status.duplicate > span {
+  color: #8c867f;
+}
 .error-detail {
   font-size: 8px;
   color: #b59673;

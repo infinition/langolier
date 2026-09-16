@@ -16,11 +16,12 @@ import {
   Play,
   ListChecks,
   CircleCheck,
+  Copy,
 } from "lucide-react";
 import type { Doc, Watch } from "../types";
 import { Button, PageHeading, Empty, Modal } from "../components/Common";
 import { confirm } from "../components/SourceEditor";
-import { api, desktop, number } from "../api";
+import { api, desktop, docError, number } from "../api";
 
 // Offered intervals, in seconds.
 export const INTERVALS: [number, string][] = [
@@ -478,6 +479,7 @@ function WatchDetail({
   onChanged: () => Promise<void>;
 }) {
   const errors = docs.filter((d) => d.status === "error");
+  const duplicates = docs.filter((d) => d.status === "duplicate");
   const running = docs.filter(
     (d) => d.status === "queued" || d.status === "processing",
   );
@@ -496,26 +498,30 @@ function WatchDetail({
         {running.length > 0 && (
           <section>
             <h4>
-              <LoaderCircle className="spin" size={14} /> En traitement (
-              {running.length})
+              <LoaderCircle className="spin" size={14} />{" "}
+              {t("Processing ({n})", { n: running.length })}
             </h4>
             <ul>
               {running.slice(0, 200).map((d) => (
                 <li key={d.id}>
                   <span className="truncate">{d.name}</span>
-                  <em>{d.status === "processing" ? d.stage : t("queued")}</em>
+                  <em>
+                    {d.status === "processing" ? t(d.stage) : t("Queued")}
+                  </em>
                 </li>
               ))}
             </ul>
             {running.length > 200 && (
-              <p className="muted">…et {running.length - 200} autres.</p>
+              <p className="muted">
+                {t("…and {n} more.", { n: running.length - 200 })}
+              </p>
             )}
           </section>
         )}
         {errors.length > 0 && (
           <section className="watch-detail-errors">
             <h4>
-              <CircleAlert size={14} /> En erreur ({errors.length})
+              <CircleAlert size={14} /> {t("Failed ({n})", { n: errors.length })}
               <Button onClick={() => void retry(errors.map((d) => d.id))}>
                 <RefreshCw size={13} /> {t("Retry everything")}
               </Button>
@@ -526,10 +532,32 @@ function WatchDetail({
                   <span className="truncate" title={d.source}>
                     {d.name}
                   </span>
-                  <em title={d.error || ""}>{d.error || "raison inconnue"}</em>
+                  <em title={d.error || ""}>
+                    {d.error ? docError(d.error) : t("unknown reason")}
+                  </em>
                   <button title={t("Retry")} onClick={() => void retry([d.id])}>
                     <RefreshCw size={13} />
                   </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {duplicates.length > 0 && (
+          <section>
+            <h4>
+              <Copy size={13} />{" "}
+              {t("{n} duplicate(s)", { n: duplicates.length })}
+            </h4>
+            <ul>
+              {duplicates.slice(0, 200).map((d) => (
+                <li key={d.id}>
+                  <span className="truncate" title={d.source}>
+                    {d.name}
+                  </span>
+                  <em title={d.error || ""}>
+                    {d.error ? docError(d.error) : ""}
+                  </em>
                 </li>
               ))}
             </ul>

@@ -16,6 +16,9 @@ pub const TYPES: &[&str] = &[
     "html", "css", "sql", "r", "jl", "ipynb", "pdf", "srt", "vtt", "mp4", "mkv", "mov", "webm",
     "avi", "m4v", "mp3", "wav", "m4a", "flac", "ogg", "docx", "pptx", "xlsx", "odt", "odp", "ods",
 ];
+/// A source whose bytes are already indexed is not a failure: the ingestion
+/// stops, and the row is parked under its own status rather than in errors.
+pub const DUPLICATE: &str = "Duplicate of ";
 fn media(ext: &str) -> bool {
     [
         "mp4", "mkv", "mov", "webm", "avi", "m4v", "mp3", "wav", "m4a", "flac", "ogg",
@@ -570,7 +573,7 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
             )
             .ok();
         if let Some(other) = duplicate {
-            return Err(format!("Doublon de contenu : {other}"));
+            return Err(format!("{DUPLICATE}{other}"));
         }
         c.execute(
             "UPDATE documents SET hash=?2 WHERE id=?1",
@@ -713,8 +716,9 @@ pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {
             let result = process(&db, &id, &source, &kind, &name).await;
             let status = if result.is_ok() { "ok" } else { "error" };
             if let Err(e) = &result {
+                let duplicate = e.starts_with(DUPLICATE);
                 if let Ok(c) = db.conn() {
-                    let _=c.execute("UPDATE documents SET status='error',stage='Needs checking',error=?2,updated=?3 WHERE id=?1",params![id,e,now()]);
+                    let _=c.execute("UPDATE documents SET status=?4,stage=?5,error=?2,updated=?3 WHERE id=?1",params![id,e,now(),if duplicate{"duplicate"}else{"error"},if duplicate{"Duplicate"}else{"Needs checking"}]);
                 }
             }
             let _ = db.log(

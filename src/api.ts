@@ -65,6 +65,13 @@ export const bytes = (n: number) =>
     : n >= 1e6
       ? `${(n / 1e6).toFixed(1)} ${t("MB")}`
       : `${Math.ceil(n / 1e3)} ${t("KB")}`;
+const DUPLICATE = "Duplicate of ";
+/// A duplicate names the source already holding those bytes, so the name is
+/// kept out of the lookup key.
+export const docError = (e: string) =>
+  e.startsWith(DUPLICATE)
+    ? t("Duplicate of {name}", { name: e.slice(DUPLICATE.length) })
+    : t(e);
 export const locale = () => (getLang() === "fr" ? "fr-FR" : "en-US");
 export const number = (n: number) =>
   new Intl.NumberFormat(locale()).format(n);

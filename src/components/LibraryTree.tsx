@@ -256,7 +256,7 @@ export default function LibraryTree({
             title={`${d.source}\n${new Date(d.created * 1000).toLocaleString(locale())}`}
           >
             <span
-              className={`status-dot ${d.status === "ready" ? "online" : d.status === "error" ? "warning" : "pulse"}`}
+              className={`status-dot ${d.status === "ready" ? "online" : d.status === "error" ? "warning" : d.status === "duplicate" ? "" : "pulse"}`}
             />
             <span className="truncate">{d.name}</span>
           </button>

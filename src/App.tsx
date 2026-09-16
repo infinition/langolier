@@ -52,6 +52,7 @@ import {
   LoaderCircle,
   RefreshCw,
   Trash2,
+  Copy,
   Eye,
   ListTree,
   List,
@@ -74,7 +75,15 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, initial, desktop, errorText, bytes, number } from "./api";
+import {
+  api,
+  initial,
+  desktop,
+  errorText,
+  docError,
+  bytes,
+  number,
+} from "./api";
 import type {
   Chunk,
   Doc,
@@ -172,9 +181,9 @@ export default function App() {
   }
   const [filter, setFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "error">(
-    "all",
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "pending" | "error" | "duplicate"
+  >("all");
   const [libraryView, setLibraryView] = useState<"list" | "tree" | "search">(
     "list",
   );
@@ -317,20 +326,21 @@ export default function App() {
     }
   }
   /// Removes a source or a whole folder, after confirmation.
-  async function removeDocs(ids: string[], label: string) {
+  async function removeDocs(ids: string[], label: string, prompt?: string) {
     const many = ids.length > 1;
     if (
       !(await confirm(
-        many
-          ? t(
-              'Remove the {n} sources under "{label}" from the index? The original files are untouched.',
-              { n: ids.length, label },
-            )
-          : t(
-              'Remove "{label}" from the index? The original file is untouched.',
-              { label },
-            ),
-        many ? t("Remove a folder") : t("Remove a source"),
+        prompt ??
+          (many
+            ? t(
+                'Remove the {n} sources under "{label}" from the index? The original files are untouched.',
+                { n: ids.length, label },
+              )
+            : t(
+                'Remove "{label}" from the index? The original file is untouched.',
+                { label },
+              )),
+        prompt ? label : many ? t("Remove a folder") : t("Remove a source"),
       ))
     )
       return;
@@ -489,6 +499,7 @@ export default function App() {
   const chunks = docs.reduce((a, d) => a + d.chunks, 0);
   const indexed = docs.reduce((a, d) => a + d.embedded, 0);
   const failed = docs.filter((d) => d.status === "error").length;
+  const duplicates = docs.filter((d) => d.status === "duplicate").length;
   const visibleDocs = docs.filter(
     (d) =>
       d.name.toLowerCase().includes(filter.toLowerCase()) &&
@@ -499,16 +510,20 @@ export default function App() {
             ? kindIcon(d.kind) === Code2
             : kindIcon(d.kind) === FileText)) &&
       (statusFilter === "all" ||
-        (statusFilter === "error"
-          ? d.status === "error"
-          : ["queued", "processing"].includes(d.status))),
+        (statusFilter === "pending"
+          ? ["queued", "processing"].includes(d.status)
+          : d.status === statusFilter)),
   );
   const retriable = visibleDocs.filter((d) => d.status === "error");
-  // The error chip carries the filter, so it must not stay on once every
-  // source has been processed again.
+  const duplicated = visibleDocs.filter((d) => d.status === "duplicate");
+  // A chip carries the filter, so it must not stay on once its sources are gone.
   useEffect(() => {
-    if (!failed && statusFilter === "error") setStatusFilter("all");
-  }, [failed, statusFilter]);
+    if (
+      (!failed && statusFilter === "error") ||
+      (!duplicates && statusFilter === "duplicate")
+    )
+      setStatusFilter("all");
+  }, [failed, duplicates, statusFilter]);
   const activeNav = navigation.find((n) => n.id === page)!;
   return (
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
@@ -1079,6 +1094,21 @@ export default function App() {
                   {t("{n} to check", { n: failed })}
                 </button>
               )}
+              {duplicates > 0 && (
+                <button
+                  type="button"
+                  className={`stat-filter ${statusFilter === "duplicate" ? "selected" : ""}`}
+                  aria-pressed={statusFilter === "duplicate"}
+                  onClick={() =>
+                    setStatusFilter(
+                      statusFilter === "duplicate" ? "all" : "duplicate",
+                    )
+                  }
+                >
+                  <Copy size={12} />
+                  {t("{n} duplicate(s)", { n: duplicates })}
+                </button>
+              )}
             </div>
             <div className="library-toolbar">
               <div className="segmented view-switch" role="tablist">
@@ -1147,14 +1177,31 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              {libraryView !== "search" && retriable.length > 0 && (
-                <Button
-                  onClick={() => void retryDocs(retriable.map((d) => d.id))}
-                >
-                  <RefreshCw size={14} />{" "}
-                  {t("Process {n} again", { n: retriable.length })}
-                </Button>
-              )}
+              {libraryView !== "search" &&
+                (statusFilter === "duplicate" && duplicated.length > 0 ? (
+                  <Button
+                    onClick={() =>
+                      void removeDocs(
+                        duplicated.map((d) => d.id),
+                        t("Remove the duplicates"),
+                        t(
+                          "Remove the {n} duplicate(s) from the index? The source already holding those bytes stays, and the original files are untouched.",
+                          { n: duplicated.length },
+                        ),
+                      )
+                    }
+                  >
+                    <Trash2 size={14} />{" "}
+                    {t("Remove {n} duplicate(s)", { n: duplicated.length })}
+                  </Button>
+                ) : retriable.length > 0 ? (
+                  <Button
+                    onClick={() => void retryDocs(retriable.map((d) => d.id))}
+                  >
+                    <RefreshCw size={14} />{" "}
+                    {t("Process {n} again", { n: retriable.length })}
+                  </Button>
+                ) : null)}
             </div>
             {libraryView === "search" ? (
               <MemorySearch
@@ -1228,6 +1275,8 @@ export default function App() {
                             <CircleCheck size={13} />
                           ) : d.status === "error" ? (
                             <CircleAlert size={13} />
+                          ) : d.status === "duplicate" ? (
+                            <Copy size={12} />
                           ) : (
                             <span className="status-dot" />
                           )}
@@ -1236,7 +1285,7 @@ export default function App() {
                         {d.error && (
                           <button
                             className="error-detail"
-                            onClick={() => setError(d.error!)}
+                            onClick={() => setError(docError(d.error!))}
                           >
                             {t("See details")}
                           </button>

@@ -117,7 +117,8 @@ impl Db {
  CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id);
  CREATE INDEX IF NOT EXISTS docs_state ON documents(status,created);
  UPDATE documents SET status='queued',stage='Resumed after interruption' WHERE status='processing';
- UPDATE documents SET stage=CASE stage WHEN 'Index hybride' THEN 'Hybrid index' WHEN 'Index lexical' THEN 'Lexical index' WHEN 'À vérifier' THEN 'Needs checking' WHEN 'En attente' THEN 'Queued' WHEN 'Préparation' THEN 'Preparing' ELSE stage END WHERE stage IN ('Index hybride','Index lexical','À vérifier','En attente','Préparation');").map_err(err)?;
+ UPDATE documents SET stage=CASE stage WHEN 'Index hybride' THEN 'Hybrid index' WHEN 'Index lexical' THEN 'Lexical index' WHEN 'À vérifier' THEN 'Needs checking' WHEN 'En attente' THEN 'Queued' WHEN 'Préparation' THEN 'Preparing' ELSE stage END WHERE stage IN ('Index hybride','Index lexical','À vérifier','En attente','Préparation');
+ UPDATE documents SET status='duplicate',stage='Duplicate',error='Duplicate of '||substr(error,length('Doublon de contenu : ')+1) WHERE status='error' AND error LIKE 'Doublon de contenu : %';").map_err(err)?;
         c.execute_batch(crate::watch::schema()).map_err(err)?;
         crate::watch::migrate(&c)?;
         c.execute_batch(crate::assistant::schema()).map_err(err)?;
