@@ -10,7 +10,7 @@ import {
 import { t } from "../i18n";
 import type { Snapshot, Health } from "../types";
 import { Button, PageHeading } from "../components/Common";
-import { number, bytes } from "../api";
+import { number, bytes, locale } from "../api";
 export default function Metrics({
   data,
   health,
@@ -193,7 +193,7 @@ export default function Metrics({
               <span>{r.status}</span>
               <span>{(r.latency_ms / 1000).toFixed(1)} s</span>
               <time>
-                {new Date(r.created * 1000).toLocaleTimeString("fr-FR")}
+                {new Date(r.created * 1000).toLocaleTimeString(locale())}
               </time>
             </div>
           ))

@@ -116,7 +116,9 @@ impl Db {
  CREATE TABLE IF NOT EXISTS evaluations(id TEXT PRIMARY KEY,question TEXT NOT NULL,expected_document TEXT NOT NULL);
  CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id);
  CREATE INDEX IF NOT EXISTS docs_state ON documents(status,created);
- UPDATE documents SET status='queued',stage='Resumed after interruption' WHERE status='processing';").map_err(err)?;
+ UPDATE documents SET status='queued',stage='Resumed after interruption' WHERE status='processing';
+ UPDATE documents SET stage='Hybrid index' WHERE stage='Index hybride';
+ UPDATE documents SET stage='Lexical index' WHERE stage='Index lexical';").map_err(err)?;
         c.execute_batch(crate::watch::schema()).map_err(err)?;
         crate::watch::migrate(&c)?;
         c.execute_batch(crate::assistant::schema()).map_err(err)?;

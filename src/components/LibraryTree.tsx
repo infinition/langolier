@@ -17,6 +17,7 @@ import {
   Eye,
 } from "lucide-react";
 import type { Doc } from "../types";
+import { locale } from "../api";
 
 const MEDIA = [
   "mp4",
@@ -252,7 +253,7 @@ export default function LibraryTree({
             onClick={() =>
               onOpen ? onOpen(d) : onSelect?.([d.id], !selected?.has(d.id))
             }
-            title={`${d.source}\n${new Date(d.created * 1000).toLocaleString("fr-FR")}`}
+            title={`${d.source}\n${new Date(d.created * 1000).toLocaleString(locale())}`}
           >
             <span
               className={`status-dot ${d.status === "ready" ? "online" : d.status === "error" ? "warning" : "pulse"}`}
@@ -260,9 +261,9 @@ export default function LibraryTree({
             <span className="truncate">{d.name}</span>
           </button>
           <small>
-            {d.chunks ? `${d.chunks} p.` : d.stage}
+            {d.chunks ? `${d.chunks} p.` : t(d.stage)}
             {" · "}
-            {new Date(d.created * 1000).toLocaleDateString("fr-FR")}
+            {new Date(d.created * 1000).toLocaleDateString(locale())}
           </small>
           {onPreview && (
             <button

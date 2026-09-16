@@ -274,6 +274,21 @@ fn delete_document(state: State<AppState>, id: String) -> Res<()> {
     }
     Ok(())
 }
+/// Queues several sources again at once, typically every source left in error.
+#[tauri::command]
+fn retry_documents(state: State<AppState>, ids: Vec<String>) -> Res<Value> {
+    if ids.is_empty() || ids.len() > 20000 {
+        return Err("Selection empty or too large.".into());
+    }
+    let mut c = state.db.conn()?;
+    let tx = c.transaction().map_err(err)?;
+    let mut queued = 0usize;
+    for id in &ids {
+        queued+=tx.execute("UPDATE documents SET status='queued',stage='Queued',error=NULL,updated=?2 WHERE id=?1 AND status!='processing'",params![id,now()]).map_err(err)?;
+    }
+    tx.commit().map_err(err)?;
+    Ok(json!({"queued": queued, "busy": ids.len() - queued}))
+}
 /// Removes several sources from the index at once.
 #[tauri::command]
 fn delete_documents(state: State<AppState>, ids: Vec<String>) -> Res<Value> {
@@ -1224,6 +1239,7 @@ pub fn run() {
             import_text,
             import_url,
             retry_document,
+            retry_documents,
             reindex_all,
             reindex_documents,
             set_ingestion_paused,

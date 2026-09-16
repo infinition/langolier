@@ -65,5 +65,6 @@ export const bytes = (n: number) =>
     : n >= 1e6
       ? `${(n / 1e6).toFixed(1)} ${t("MB")}`
       : `${Math.ceil(n / 1e3)} ${t("KB")}`;
+export const locale = () => (getLang() === "fr" ? "fr-FR" : "en-US");
 export const number = (n: number) =>
-  new Intl.NumberFormat(getLang() === "fr" ? "fr-FR" : "en-US").format(n);
+  new Intl.NumberFormat(locale()).format(n);

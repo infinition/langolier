@@ -172,6 +172,9 @@ export default function App() {
   }
   const [filter, setFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "error">(
+    "all",
+  );
   const [libraryView, setLibraryView] = useState<"list" | "tree" | "search">(
     "list",
   );
@@ -348,6 +351,36 @@ export default function App() {
       reportError(e);
     }
   }
+  /// Queues every failed source of the current view again.
+  async function retryDocs(ids: string[]) {
+    if (!ids.length) return;
+    if (
+      !(await confirm(
+        t(
+          "Process the {n} source(s) needing a check again? Processing runs in the background.",
+          { n: ids.length },
+        ),
+        t("Process again"),
+      ))
+    )
+      return;
+    try {
+      const r = await api<{ queued: number; busy: number }>("retry_documents", {
+        ids,
+      });
+      notify(
+        r.busy
+          ? t("{n} source(s) queued again; {busy} still processing.", {
+              n: r.queued,
+              busy: r.busy,
+            })
+          : t("{n} source(s) queued again.", { n: r.queued }),
+      );
+      await refresh();
+    } catch (e) {
+      reportError(e);
+    }
+  }
   /// Immediate deletion, no confirmation.
   async function removeConversation(id: string) {
     try {
@@ -455,6 +488,7 @@ export default function App() {
   ).length;
   const chunks = docs.reduce((a, d) => a + d.chunks, 0);
   const indexed = docs.reduce((a, d) => a + d.embedded, 0);
+  const failed = docs.filter((d) => d.status === "error").length;
   const visibleDocs = docs.filter(
     (d) =>
       d.name.toLowerCase().includes(filter.toLowerCase()) &&
@@ -463,8 +497,13 @@ export default function App() {
           ? kindIcon(d.kind) === Video
           : typeFilter === "code"
             ? kindIcon(d.kind) === Code2
-            : kindIcon(d.kind) === FileText)),
+            : kindIcon(d.kind) === FileText)) &&
+      (statusFilter === "all" ||
+        (statusFilter === "error"
+          ? d.status === "error"
+          : ["queued", "processing"].includes(d.status))),
   );
+  const retriable = visibleDocs.filter((d) => d.status === "error");
   const activeNav = navigation.find((n) => n.id === page)!;
   return (
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
@@ -1007,14 +1046,34 @@ export default function App() {
               <span>
                 <b>{number(indexed)}</b> {t("vectors")}
               </span>
-              <span className={queued ? "lime" : ""}>
+              <button
+                type="button"
+                className={`stat-filter ${queued ? "lime" : ""} ${statusFilter === "pending" ? "selected" : ""}`}
+                aria-pressed={statusFilter === "pending"}
+                onClick={() =>
+                  setStatusFilter(statusFilter === "pending" ? "all" : "pending")
+                }
+              >
                 <span
                   className={`status-dot ${queued ? "online pulse" : ""}`}
                 />
                 {queued
-                  ? `${queued} en attente ou en cours`
+                  ? t("{n} queued or running", { n: queued })
                   : t("Queue up to date")}
-              </span>
+              </button>
+              {failed > 0 && (
+                <button
+                  type="button"
+                  className={`stat-filter amber ${statusFilter === "error" ? "selected" : ""}`}
+                  aria-pressed={statusFilter === "error"}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "error" ? "all" : "error")
+                  }
+                >
+                  <CircleAlert size={13} />
+                  {t("{n} to check", { n: failed })}
+                </button>
+              )}
             </div>
             <div className="library-toolbar">
               <div className="segmented view-switch" role="tablist">
@@ -1083,6 +1142,14 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {libraryView !== "search" && retriable.length > 0 && (
+                <Button
+                  onClick={() => void retryDocs(retriable.map((d) => d.id))}
+                >
+                  <RefreshCw size={14} />{" "}
+                  {t("Process {n} again", { n: retriable.length })}
+                </Button>
+              )}
             </div>
             {libraryView === "search" ? (
               <MemorySearch
@@ -1159,7 +1226,7 @@ export default function App() {
                           ) : (
                             <span className="status-dot" />
                           )}
-                          {d.stage}
+                          {t(d.stage)}
                         </span>
                         {d.error && (
                           <button
@@ -1201,6 +1268,13 @@ export default function App() {
                   <Empty
                     title={t("No matching source")}
                     text={t("Try another name or another filter.")}
+                    action={
+                      statusFilter !== "all" ? (
+                        <Button onClick={() => setStatusFilter("all")}>
+                          {t("Show every source")}
+                        </Button>
+                      ) : undefined
+                    }
                   />
                 )}
               </div>

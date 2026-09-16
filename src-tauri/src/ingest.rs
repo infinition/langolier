@@ -289,7 +289,7 @@ async fn transcribe(
     if !Path::new(&s.whisper_model).is_file() {
         return Err("Whisper model missing. Install the engines, then point to the ggml file under Engines.".into());
     }
-    db.stage(id, "Extraction audio · FFmpeg")?;
+    db.stage(id, "Audio extraction · FFmpeg")?;
     let wav = db.root.join("media").join(format!("{id}.wav"));
     command(
         "ffmpeg",
@@ -414,7 +414,7 @@ async fn pdf_sections(db: &Db, id: &str, path: &Path) -> Res<Vec<Section>> {
     let mut pages = match native {
         Some(pages) => pages,
         None => {
-            db.stage(id, "Extraction · pdftotext")?;
+            db.stage(id, "Text extraction · pdftotext")?;
             match pdftotext_pages(path).await {
                 Ok(pages) if !pages.is_empty() => pages,
                 _ => {
@@ -465,7 +465,7 @@ async fn pdf_sections(db: &Db, id: &str, path: &Path) -> Res<Vec<Section>> {
     for (index, text) in pages.iter_mut().enumerate() {
         let scanned = text.chars().filter(|c| c.is_alphanumeric()).count() < 30;
         if scanned {
-            db.stage(id, &format!("OCR local · page {}/{}", index + 1, count))?;
+            db.stage(id, &format!("OCR · page {}/{}", index + 1, count))?;
             let prefix = db.root.join("media").join(format!("{id}-ocr-page"));
             let image = prefix.with_extension("png");
             command(
@@ -555,7 +555,7 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
     } else {
         PathBuf::from(source)
     };
-    db.stage(id, "Lecture et empreinte SHA-256")?;
+    db.stage(id, "Reading and SHA-256 fingerprint")?;
     let p = path.clone();
     let hash = tokio::task::spawn_blocking(move || hash_file(&p))
         .await
@@ -684,7 +684,7 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
             }
         }
     }
-    db.conn()?.execute("UPDATE documents SET status='ready',stage=?2,error=?3,language=?4,updated=?5 WHERE id=?1",params![id,if warning.is_some(){"Index lexical"}else{"Index hybride"},warning,language,now()]).map_err(err)?;
+    db.conn()?.execute("UPDATE documents SET status='ready',stage=?2,error=?3,language=?4,updated=?5 WHERE id=?1",params![id,if warning.is_some(){"Lexical index"}else{"Hybrid index"},warning,language,now()]).map_err(err)?;
     Ok(())
 }
 pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {

@@ -1091,12 +1091,37 @@ nav button:hover {
   color: #d1cfcc;
   margin-right: 5px;
 }
-.library-stats > span:last-child {
-  margin-left: auto;
+.library-stats .stat-filter {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 10px;
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.library-stats .stat-filter:first-of-type {
+  margin-left: auto;
+}
+.library-stats .stat-filter:hover {
+  border-color: #46423e;
+}
+.library-stats .stat-filter.selected {
+  border-color: #56504a;
+  background: #221f1d;
+}
+.library-stats .stat-filter.amber {
+  color: #dcb086;
+}
+.library-toolbar > .button {
+  flex-shrink: 0;
 }
 .lime {
   color: var(--lime) !important;
@@ -2393,8 +2418,9 @@ label textarea {
     gap: 14px;
     font-size: 9px;
   }
-  .library-stats > span:last-child {
+  .library-stats .stat-filter {
     font-size: 8px;
+    padding: 4px 8px;
   }
   .searchbox input {
     width: 150px;
