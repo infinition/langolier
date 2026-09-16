@@ -32,25 +32,31 @@ pub fn chunk(text: &str, size: usize, overlap: usize) -> Vec<String> {
     }
     chunks
 }
-pub fn encode(v: &[f32]) -> Vec<u8> {
-    v.iter().flat_map(|x| x.to_le_bytes()).collect()
+/// Unit length, so that comparing two vectors is a plain dot product.
+pub fn unit(v: &[f32]) -> Vec<f32> {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        v.iter().map(|x| x / norm).collect()
+    } else {
+        v.to_vec()
+    }
 }
+/// Vectors go to storage normalized: the scan then skips both norms and the
+/// square root, on every stored vector, on every question.
+pub fn encode(v: &[f32]) -> Vec<u8> {
+    unit(v).iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+/// Cosine between a unit query and a stored unit vector. Kept in f32 so the
+/// loop stays vectorizable; the accumulator is wide enough for 4096 dimensions.
 fn cosine_blob(q: &[f32], b: &[u8]) -> f64 {
     if b.len() != q.len() * 4 {
         return -1.0;
     }
-    let (mut dot, mut a, mut c) = (0.0f64, 0.0f64, 0.0f64);
+    let mut dot = 0.0f32;
     for (x, raw) in q.iter().zip(b.as_chunks::<4>().0) {
-        let y = f32::from_le_bytes(*raw) as f64;
-        dot += *x as f64 * y;
-        a += (*x as f64).powi(2);
-        c += y * y;
+        dot += x * f32::from_le_bytes(*raw);
     }
-    if a * c == 0.0 {
-        0.0
-    } else {
-        dot / (a * c).sqrt()
-    }
+    dot as f64
 }
 /// How many passages retrieval returns.
 pub fn candidate_limit(s: &Settings) -> usize {
@@ -113,6 +119,7 @@ pub fn search(
     }
     if mode != "lexical" && mode != "exact" {
         if let Some(q) = vector {
+            let q = &unit(q)[..];
             let mut st=c.prepare(&format!("SELECT ch.id,ch.embedding FROM chunks ch JOIN documents d ON d.id=ch.doc_id WHERE ch.embedding_model=?1 AND ch.embedding IS NOT NULL AND d.status='ready' AND {in_scope}")).map_err(err)?;
             let mut rows = st
                 .query(params![embedding_key(s), scope_json])
@@ -120,8 +127,10 @@ pub fn search(
             let mut best: Vec<(i64, f64)> = Vec::with_capacity(49);
             while let Some(r) = rows.next().map_err(err)? {
                 let id: i64 = r.get(0).map_err(err)?;
-                let b: Vec<u8> = r.get(1).map_err(err)?;
-                let score = cosine_blob(q, &b);
+                // Borrowed straight from the page cache: copying every vector
+                // into a Vec costs more than the arithmetic that follows.
+                let b = r.get_ref(1).map_err(err)?.as_blob().map_err(err)?;
+                let score = cosine_blob(q, b);
                 if score > s.min_dense_score.clamp(-1.0, 1.0) as f64 {
                     best.push((id, score));
                     best.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
@@ -347,6 +356,51 @@ pub fn pack_sources(sources: &mut Vec<Source>, budget: usize) {
 }
 
 #[cfg(test)]
+mod bench {
+    use super::*;
+    /// Times a dense scan over the caller's real library.
+    /// LANGOLIER_BENCH_DB=/path/to/langolier.sqlite3 cargo test dense_scan -- --ignored --nocapture
+    #[test]
+    #[ignore = "Needs LANGOLIER_BENCH_DB pointing at a populated library"]
+    fn dense_scan() {
+        let Ok(path) = std::env::var("LANGOLIER_BENCH_DB") else {
+            return;
+        };
+        let root = std::path::PathBuf::from(&path);
+        let root = root.parent().unwrap();
+        let db = Db::new(root).unwrap();
+        let mut s = Settings::default();
+        s.embedding_endpoint = "http://127.0.0.1:11434".into();
+        s.embedding_model = "embeddinggemma".into();
+        s.min_dense_score = -1.0;
+        let dims = {
+            let c = db.conn().unwrap();
+            c.query_row(
+                "SELECT length(embedding)/4 FROM chunks WHERE embedding IS NOT NULL LIMIT 1",
+                [],
+                |r| r.get::<_, usize>(0),
+            )
+            .unwrap()
+        };
+        let q: Vec<f32> = (0..dims).map(|i| ((i % 17) as f32) / 17.0 - 0.5).collect();
+        for pass in 1..=3 {
+            // A fresh Db owns an empty pool: this is what every search used to pay.
+            let cold = Db::new(root).unwrap();
+            let start = std::time::Instant::now();
+            search(&cold, "", Some(&q), &s, "semantic", 6, None).unwrap();
+            let fresh = start.elapsed();
+            let start = std::time::Instant::now();
+            let found = search(&db, "", Some(&q), &s, "semantic", 6, None).unwrap();
+            println!(
+                "pass {pass}: fresh connection {} ms, pooled {} ms, {} passages, {dims} dims",
+                fresh.as_millis(),
+                start.elapsed().as_millis(),
+                found.len()
+            );
+        }
+    }
+}
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
@@ -359,8 +413,38 @@ mod tests {
     }
     #[test]
     fn vector_dimensions() {
-        assert!((cosine_blob(&[1.0, 0.0], &encode(&[1.0, 0.0])) - 1.0).abs() < 1e-6);
-        assert_eq!(cosine_blob(&[1.0], &encode(&[1.0, 2.0])), -1.0)
+        assert!((cosine_blob(&unit(&[1.0, 0.0]), &encode(&[3.0, 0.0])) - 1.0).abs() < 1e-6);
+        assert!((cosine_blob(&unit(&[1.0, 1.0]), &encode(&[2.0, 0.0])) - 0.707).abs() < 1e-3);
+        assert!(cosine_blob(&unit(&[1.0, 0.0]), &encode(&[-1.0, 0.0])) < -0.99);
+        assert_eq!(cosine_blob(&[1.0], &encode(&[1.0, 2.0])), -1.0);
+        assert_eq!(unit(&[0.0, 0.0]), vec![0.0, 0.0])
+    }
+    /// Dense ranking must follow the angle between vectors, whatever length
+    /// the embedding model hands back, and whatever length was stored.
+    #[test]
+    fn dense_ranking_ignores_vector_length() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::new(tmp.path()).unwrap();
+        let mut s = Settings::default();
+        s.embedding_endpoint = "e".into();
+        s.embedding_model = "m".into();
+        s.min_dense_score = -1.0;
+        let key = embedding_key(&s);
+        let c = db.conn().unwrap();
+        c.execute("INSERT INTO documents(id,name,source,kind,status,created,updated)VALUES('a','A','x','md','ready',1,1)",[]).unwrap();
+        c.execute("INSERT INTO documents(id,name,source,kind,status,created,updated)VALUES('b','B','x','md','ready',1,1)",[]).unwrap();
+        // The near match is stored 50 times longer than the far one.
+        c.execute("INSERT INTO chunks(doc_id,ordinal,text,locator,embedding,embedding_model)VALUES('a',0,'near','p',?1,?2)",params![encode(&[50.0,1.0]),&key]).unwrap();
+        c.execute("INSERT INTO chunks(doc_id,ordinal,text,locator,embedding,embedding_model)VALUES('b',0,'far','p',?1,?2)",params![encode(&[0.02,1.0]),&key]).unwrap();
+        let q = [3.0f32, 0.0];
+        let r = search(&db, "", Some(&q), &s, "semantic", 5, None).unwrap();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].doc_id, "a", "the closest angle must win");
+        // A threshold above the far vector's cosine drops it.
+        s.min_dense_score = 0.5;
+        let r = search(&db, "", Some(&q), &s, "semantic", 5, None).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].doc_id, "a")
     }
     #[test]
     fn fts_cascade_and_rank() {

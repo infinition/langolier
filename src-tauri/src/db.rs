@@ -1,6 +1,8 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 pub type Res<T> = Result<T, String>;
 pub fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -91,14 +93,86 @@ impl Default for Settings {
         }
     }
 }
+/// Connections kept warm between calls. Reopening one drops the page cache,
+/// and a dense search then rereads every vector from disk.
+const POOL_SIZE: usize = 8;
+/// A pooled connection, handed back on drop. It behaves like a Connection,
+/// and like one it must not be held across an await: it is not Sync.
+pub struct Pooled {
+    conn: Option<Connection>,
+    pool: Arc<Mutex<Vec<Connection>>>,
+}
+impl Deref for Pooled {
+    type Target = Connection;
+    fn deref(&self) -> &Connection {
+        self.conn.as_ref().expect("connection taken")
+    }
+}
+impl DerefMut for Pooled {
+    fn deref_mut(&mut self) -> &mut Connection {
+        self.conn.as_mut().expect("connection taken")
+    }
+}
+impl Drop for Pooled {
+    fn drop(&mut self) {
+        if let Some(c) = self.conn.take() {
+            if let Ok(mut pool) = self.pool.lock() {
+                if pool.len() < POOL_SIZE {
+                    pool.push(c)
+                }
+            }
+        }
+    }
+}
 #[derive(Clone)]
 pub struct Db {
     pub root: PathBuf,
+    pool: Arc<Mutex<Vec<Connection>>>,
+}
+/// Vectors written before storage normalization carry their original length,
+/// which a plain dot product would read as a score. One pass, once.
+fn normalize_vectors(c: &Connection) -> Res<()> {
+    let version: i64 = c
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .map_err(err)?;
+    if version >= 1 {
+        return Ok(());
+    }
+    let rows: Vec<(i64, Vec<u8>)> = {
+        let mut st = c
+            .prepare("SELECT id,embedding FROM chunks WHERE embedding IS NOT NULL")
+            .map_err(err)?;
+        let found = st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(err)?;
+        found
+    };
+    c.execute_batch("BEGIN;").map_err(err)?;
+    for (id, blob) in rows {
+        let v: Vec<f32> = blob
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        c.execute(
+            "UPDATE chunks SET embedding=?2 WHERE id=?1",
+            params![id, crate::rag::encode(&v)],
+        )
+        .map_err(err)?;
+    }
+    c.execute_batch("COMMIT; PRAGMA user_version=1;")
+        .map_err(err)
 }
 impl Db {
     pub fn new(root: &Path) -> Res<Self> {
         std::fs::create_dir_all(root.join("media")).map_err(err)?;
-        let db = Self { root: root.into() };
+        let db = Self {
+            root: root.into(),
+            pool: Arc::new(Mutex::new(vec![])),
+        };
         let c = db.conn()?;
         c.execute_batch("PRAGMA journal_mode=WAL;
  CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL);
@@ -119,6 +193,7 @@ impl Db {
  UPDATE documents SET status='queued',stage='Resumed after interruption' WHERE status='processing';
  UPDATE documents SET stage=CASE stage WHEN 'Index hybride' THEN 'Hybrid index' WHEN 'Index lexical' THEN 'Lexical index' WHEN 'À vérifier' THEN 'Needs checking' WHEN 'En attente' THEN 'Queued' WHEN 'Préparation' THEN 'Preparing' ELSE stage END WHERE stage IN ('Index hybride','Index lexical','À vérifier','En attente','Préparation');
  UPDATE documents SET status='duplicate',stage='Duplicate',error='Duplicate of '||substr(error,length('Doublon de contenu : ')+1) WHERE status='error' AND error LIKE 'Doublon de contenu : %';").map_err(err)?;
+        normalize_vectors(&c)?;
         c.execute_batch(crate::watch::schema()).map_err(err)?;
         crate::watch::migrate(&c)?;
         c.execute_batch(crate::assistant::schema()).map_err(err)?;
@@ -132,12 +207,31 @@ impl Db {
         }
         Ok(db)
     }
-    pub fn conn(&self) -> Res<Connection> {
-        let c = Connection::open(self.root.join("langolier.sqlite3")).map_err(err)?;
-        c.busy_timeout(std::time::Duration::from_secs(15))
-            .map_err(err)?;
-        c.execute_batch("PRAGMA foreign_keys=ON;").map_err(err)?;
-        Ok(c)
+    pub fn conn(&self) -> Res<Pooled> {
+        let reused = self.pool.lock().ok().and_then(|mut p| p.pop());
+        let conn = match reused {
+            Some(c) => c,
+            None => {
+                let c = Connection::open(self.root.join("langolier.sqlite3")).map_err(err)?;
+                c.busy_timeout(std::time::Duration::from_secs(15))
+                    .map_err(err)?;
+                // A large page cache and a read-only memory map keep the vectors
+                // resident: a dense search walks all of them on every question.
+                c.execute_batch(
+                    "PRAGMA foreign_keys=ON;
+ PRAGMA synchronous=NORMAL;
+ PRAGMA temp_store=MEMORY;
+ PRAGMA cache_size=-32768;
+ PRAGMA mmap_size=268435456;",
+                )
+                .map_err(err)?;
+                c
+            }
+        };
+        Ok(Pooled {
+            conn: Some(conn),
+            pool: self.pool.clone(),
+        })
     }
     pub fn settings(&self) -> Res<Settings> {
         let c = self.conn()?;
