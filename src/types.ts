@@ -22,6 +22,10 @@ export interface Settings {
   abstain_text: string;
   verify_answer: boolean;
   shortcut: string;
+  candidate_pool: number;
+  passages_per_source: number;
+  chunk_size: number;
+  chunk_overlap: number;
   watch_interval: number;
   active_assistant: string;
   ingestion_paused: boolean;

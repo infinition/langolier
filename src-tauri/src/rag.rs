@@ -12,6 +12,28 @@ pub struct Source {
     pub locator: String,
     pub score: f64,
 }
+/// How far back a cut may travel to land on a sentence end, as a share of the
+/// window. Beyond that the passage would lose too much to be worth it.
+const CUT_SEARCH: usize = 5;
+/// Where a passage may end: sentence first, then clause, then any blank.
+fn breakpoint(chars: &[char], start: usize, end: usize) -> usize {
+    let floor = start + (end - start) * (CUT_SEARCH - 1) / CUT_SEARCH;
+    let sentence = |c: char| matches!(c, '.' | '!' | '?' | '…' | '\n');
+    let clause = |c: char| matches!(c, ';' | ':' | ',' | ')' | '»' | '"');
+    for test in [&sentence as &dyn Fn(char) -> bool, &clause] {
+        if let Some(i) = (floor..end).rev().find(|&i| test(chars[i])) {
+            // Keep the mark itself, and the space that follows it.
+            return (i + 1).min(end);
+        }
+    }
+    (floor..end)
+        .rev()
+        .find(|&i| chars[i].is_whitespace())
+        .map(|i| i + 1)
+        .unwrap_or(end)
+}
+/// Splits text into overlapping passages that end on a sentence when one is
+/// within reach: a passage cut mid-word retrieves worse, lexically and densely.
 pub fn chunk(text: &str, size: usize, overlap: usize) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();
     if size == 0 {
@@ -20,7 +42,12 @@ pub fn chunk(text: &str, size: usize, overlap: usize) -> Vec<String> {
     let mut chunks = vec![];
     let mut start = 0;
     while start < chars.len() {
-        let end = (start + size).min(chars.len());
+        let hard = (start + size).min(chars.len());
+        let end = if hard == chars.len() {
+            hard
+        } else {
+            breakpoint(&chars, start, hard)
+        };
         let t: String = chars[start..end].iter().collect();
         if !t.trim().is_empty() {
             chunks.push(t.trim().to_string())
@@ -28,7 +55,8 @@ pub fn chunk(text: &str, size: usize, overlap: usize) -> Vec<String> {
         if end == chars.len() {
             break;
         }
-        start = end - overlap.min(size - 1)
+        // The overlap is measured from the cut that was actually taken.
+        start = end.saturating_sub(overlap.min(size - 1)).max(start + 1)
     }
     chunks
 }
@@ -76,6 +104,9 @@ pub fn search(
     scope: Option<&[String]>,
 ) -> Res<Vec<Source>> {
     let c = db.conn()?;
+    // Settings arriving from an older file can carry zeros; a zero pool would
+    // silence retrieval altogether.
+    let pool = s.candidate_pool.clamp(limit.max(1), 512);
     let mut ranks: HashMap<i64, f64> = HashMap::new();
     let scope_json = match scope {
         Some(ids) => serde_json::to_string(ids).map_err(err)?,
@@ -101,7 +132,7 @@ pub fn search(
         };
         if !words.is_empty() {
             // FTS5 bm25() is negative; the threshold applies to its opposite.
-            let mut st=c.prepare(&format!("SELECT f.rowid,-bm25(chunks_fts) FROM chunks_fts f JOIN chunks ch ON ch.id=f.rowid JOIN documents d ON d.id=ch.doc_id WHERE chunks_fts MATCH ?1 AND d.status='ready' AND {in_scope} ORDER BY bm25(chunks_fts) LIMIT 48")).map_err(err)?;
+            let mut st=c.prepare(&format!("SELECT f.rowid,-bm25(chunks_fts) FROM chunks_fts f JOIN chunks ch ON ch.id=f.rowid JOIN documents d ON d.id=ch.doc_id WHERE chunks_fts MATCH ?1 AND d.status='ready' AND {in_scope} ORDER BY bm25(chunks_fts) LIMIT {pool}")).map_err(err)?;
             let rows = st
                 .query_map(params![words, scope_json], |r| {
                     Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?))
@@ -124,7 +155,7 @@ pub fn search(
             let mut rows = st
                 .query(params![embedding_key(s), scope_json])
                 .map_err(err)?;
-            let mut best: Vec<(i64, f64)> = Vec::with_capacity(49);
+            let mut best: Vec<(i64, f64)> = Vec::with_capacity(pool + 1);
             while let Some(r) = rows.next().map_err(err)? {
                 let id: i64 = r.get(0).map_err(err)?;
                 // Borrowed straight from the page cache: copying every vector
@@ -134,7 +165,7 @@ pub fn search(
                 if score > s.min_dense_score.clamp(-1.0, 1.0) as f64 {
                     best.push((id, score));
                     best.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
-                    best.truncate(48)
+                    best.truncate(pool)
                 }
             }
             for (i, (id, _)) in best.into_iter().enumerate() {
@@ -150,7 +181,12 @@ pub fn search(
     for (id, score) in ranked {
         let source=c.query_row("SELECT ch.id,ch.doc_id,d.name,ch.text,ch.locator FROM chunks ch JOIN documents d ON d.id=ch.doc_id WHERE ch.id=?1",[id],|r|Ok(Source{id:r.get(0)?,doc_id:r.get(1)?,name:r.get(2)?,text:r.get(3)?,locator:r.get(4)?,score})).map_err(err)?;
         let count = perdoc.entry(source.doc_id.clone()).or_default();
-        if *count >= 3 || !seen.insert(source.text.clone()) {
+        let cap = if s.passages_per_source == 0 {
+            usize::MAX
+        } else {
+            s.passages_per_source
+        };
+        if *count >= cap || !seen.insert(source.text.clone()) {
             continue;
         }
         *count += 1;
@@ -369,10 +405,12 @@ mod bench {
         let root = std::path::PathBuf::from(&path);
         let root = root.parent().unwrap();
         let db = Db::new(root).unwrap();
-        let mut s = Settings::default();
-        s.embedding_endpoint = "http://127.0.0.1:11434".into();
-        s.embedding_model = "embeddinggemma".into();
-        s.min_dense_score = -1.0;
+        let s = Settings {
+            embedding_endpoint: "http://127.0.0.1:11434".into(),
+            embedding_model: "embeddinggemma".into(),
+            min_dense_score: -1.0,
+            ..Default::default()
+        };
         let dims = {
             let c = db.conn().unwrap();
             c.query_row(
@@ -403,6 +441,39 @@ mod bench {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A passage should end on a sentence, and never mid-word, whenever a
+    /// boundary sits within reach of the window.
+    #[test]
+    fn chunks_end_on_sentences() {
+        let sentence = "La régularisation limite le surapprentissage du modèle. ";
+        let text = sentence.repeat(60);
+        let c = chunk(&text, 1400, 200);
+        assert!(c.len() > 1);
+        for piece in &c {
+            assert!(
+                piece.ends_with('.'),
+                "passage does not end on a sentence: {:?}",
+                &piece[piece.len().saturating_sub(40)..]
+            );
+        }
+        // A word is never split, even when no sentence end is in reach.
+        let words = "alpha beta gamma delta epsilon ".repeat(40);
+        for piece in chunk(&words, 120, 20) {
+            assert!(
+                words.contains(&piece),
+                "passage is not a run of whole words: {piece:?}"
+            );
+            assert!(!piece.ends_with("alph") && !piece.starts_with("lpha"))
+        }
+        // No boundary at all: the window still has to advance and cover it all.
+        let solid = "a".repeat(500);
+        let c = chunk(&solid, 100, 20);
+        assert!(c.len() >= 5);
+        assert_eq!(c.concat().chars().filter(|c| *c == 'a').count() >= 500, true);
+        // A pathological overlap must still terminate, one step at a time.
+        let dense = "mot ".repeat(400);
+        assert!(chunk(&dense, 50, 49).len() <= dense.chars().count())
+    }
     #[test]
     fn unicode_chunking() {
         let x = "é猫🙂bonjour".repeat(1000);
@@ -425,10 +496,12 @@ mod tests {
     fn dense_ranking_ignores_vector_length() {
         let tmp = tempfile::tempdir().unwrap();
         let db = Db::new(tmp.path()).unwrap();
-        let mut s = Settings::default();
-        s.embedding_endpoint = "e".into();
-        s.embedding_model = "m".into();
-        s.min_dense_score = -1.0;
+        let mut s = Settings {
+            embedding_endpoint: "e".into(),
+            embedding_model: "m".into(),
+            min_dense_score: -1.0,
+            ..Default::default()
+        };
         let key = embedding_key(&s);
         let c = db.conn().unwrap();
         c.execute("INSERT INTO documents(id,name,source,kind,status,created,updated)VALUES('a','A','x','md','ready',1,1)",[]).unwrap();

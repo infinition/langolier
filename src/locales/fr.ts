@@ -50,6 +50,20 @@ export const FR: Record<string, string> = {
   "Every source becomes a starting point. Your memory grows with you.":
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   "Queue up to date": "File à jour",
+  "Raw search thresholds, before the judge: minimum cosine":
+    "Seuils de recherche bruts, avant le juge : cosinus minimal",
+  "Candidates per search arm: {n}": "Candidats par voie de recherche : {n}",
+  "Passages each arm brings back before lexical and dense results are merged. Wider catches more, and costs more to rerank.":
+    "Passages que chaque voie rapporte avant la fusion des résultats lexicaux et sémantiques. Plus large attrape davantage, et coûte plus cher à reclasser.",
+  "Passages per source: {n}": "Passages par source : {n}",
+  "Passages per source: no cap": "Passages par source : sans limite",
+  "Keeps one talkative source from filling the whole answer. Zero lifts the cap.":
+    "Empêche une source bavarde de remplir toute la réponse. Zéro retire la limite.",
+  "Passage length: {n} characters": "Longueur d'un passage : {n} caractères",
+  "Applies to sources indexed from now on. Existing passages keep the length they were cut with, until a reindex.":
+    "S'applique aux sources indexées à partir de maintenant. Les passages existants gardent la longueur avec laquelle ils ont été découpés, jusqu'à une réindexation.",
+  "Overlap between passages: {n} characters":
+    "Recouvrement entre passages : {n} caractères",
   Queued: "En file",
   Preparing: "Préparation",
   "Needs checking": "À vérifier",

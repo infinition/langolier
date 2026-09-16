@@ -529,7 +529,7 @@ export default function EngineSettings({
             </small>
           </label>
           <p className="field-help">
-            Seuils de recherche bruts, avant le juge : cosinus minimal{" "}
+            {t("Raw search thresholds, before the judge: minimum cosine")}{" "}
             {s.min_dense_score.toFixed(2)}
             <input
               type="range"
@@ -551,6 +551,70 @@ export default function EngineSettings({
               }
             />
           </p>
+          <label>
+            {t("Candidates per search arm: {n}", { n: s.candidate_pool })}
+            <input
+              type="range"
+              min="8"
+              max="256"
+              step="8"
+              value={s.candidate_pool}
+              onChange={(e) => field("candidate_pool", Number(e.target.value))}
+            />
+            <small>
+              {t(
+                "Passages each arm brings back before lexical and dense results are merged. Wider catches more, and costs more to rerank.",
+              )}
+            </small>
+          </label>
+          <label>
+            {s.passages_per_source === 0
+              ? t("Passages per source: no cap")
+              : t("Passages per source: {n}", { n: s.passages_per_source })}
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={s.passages_per_source}
+              onChange={(e) =>
+                field("passages_per_source", Number(e.target.value))
+              }
+            />
+            <small>
+              {t(
+                "Keeps one talkative source from filling the whole answer. Zero lifts the cap.",
+              )}
+            </small>
+          </label>
+          <label>
+            {t("Passage length: {n} characters", { n: s.chunk_size })}
+            <input
+              type="range"
+              min="400"
+              max="4000"
+              step="100"
+              value={s.chunk_size}
+              onChange={(e) => field("chunk_size", Number(e.target.value))}
+            />
+            <small>
+              {t(
+                "Applies to sources indexed from now on. Existing passages keep the length they were cut with, until a reindex.",
+              )}
+            </small>
+          </label>
+          <label>
+            {t("Overlap between passages: {n} characters", {
+              n: s.chunk_overlap,
+            })}
+            <input
+              type="range"
+              min="0"
+              max="800"
+              step="50"
+              value={s.chunk_overlap}
+              onChange={(e) => field("chunk_overlap", Number(e.target.value))}
+            />
+          </label>
         </section>
         <section className="panel form-stack">
           <div className="panel-heading">

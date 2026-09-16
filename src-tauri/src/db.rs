@@ -39,6 +39,13 @@ pub struct Settings {
     pub verify_answer: bool,
     /// Global palette shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
+    /// Passages pulled from each search arm before fusion.
+    pub candidate_pool: usize,
+    /// Most passages one source may place in an answer; 0 lifts the cap.
+    pub passages_per_source: usize,
+    /// Passage length, in characters, and the overlap between two of them.
+    pub chunk_size: usize,
+    pub chunk_overlap: usize,
     /// Watch scan interval, in seconds.
     pub watch_interval: u64,
     /// Active assistant profile; empty means bare Langolier.
@@ -83,6 +90,10 @@ impl Default for Settings {
             abstain_text: ABSTAIN.into(),
             verify_answer: false,
             shortcut: SHORTCUT.into(),
+            candidate_pool: 48,
+            passages_per_source: 3,
+            chunk_size: 1400,
+            chunk_overlap: 200,
             watch_interval: 30,
             active_assistant: String::new(),
             ingestion_paused: false,

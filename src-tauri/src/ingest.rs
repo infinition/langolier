@@ -635,7 +635,14 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
     };
     let mut chunks = vec![];
     for section in sections {
-        for (i, text) in rag::chunk(&section.text, 1400, 200).into_iter().enumerate() {
+        for (i, text) in rag::chunk(
+            &section.text,
+            s.chunk_size.clamp(200, 20000),
+            s.chunk_overlap.min(s.chunk_size.clamp(200, 20000) / 2),
+        )
+        .into_iter()
+        .enumerate()
+        {
             chunks.push((text, format!("{} · extrait {}", section.locator, i + 1)))
         }
     }
