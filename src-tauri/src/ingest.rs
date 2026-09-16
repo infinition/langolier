@@ -379,26 +379,59 @@ fn merge_segments(sections: Vec<Section>) -> Vec<Section> {
     }
     out
 }
+fn blank(pages: &[String]) -> bool {
+    pages.iter().all(|p| p.trim().is_empty())
+}
+async fn pdftotext_pages(path: &Path) -> Res<Vec<String>> {
+    let out = command(
+        "pdftotext",
+        &[
+            "-layout".into(),
+            "-enc".into(),
+            "UTF-8".into(),
+            path.display().to_string(),
+            "-".into(),
+        ],
+        900,
+    )
+    .await?;
+    let mut pages: Vec<String> = out.split('\u{c}').map(|p| p.to_string()).collect();
+    if pages.last().is_some_and(|p| p.trim().is_empty()) {
+        pages.pop();
+    }
+    Ok(pages)
+}
 async fn pdf_sections(db: &Db, id: &str, path: &Path) -> Res<Vec<Section>> {
     let file = path.to_path_buf();
-    let extracted = tokio::task::spawn_blocking(move || pdf_extract::extract_text_by_pages(&file))
-        .await
-        .map_err(err)?;
-    let mut pages = match extracted {
-        Ok(pages) if !pages.is_empty() => pages,
-        _ => {
-            let info = command("pdfinfo", &[path.display().to_string()], 60).await?;
-            let count = info
-                .lines()
-                .find_map(|line| {
-                    line.strip_prefix("Pages:")
-                        .and_then(|s| s.trim().parse::<usize>().ok())
-                })
-                .ok_or("Cannot determine the PDF page count.")?;
-            if count > 10000 {
-                return Err("PDF capped at 10,000 pages per source.".into());
+    // pdf-extract panics on some malformed content streams, so a join failure counts
+    // as a failed extraction rather than aborting the whole source.
+    let extracted =
+        tokio::task::spawn_blocking(move || pdf_extract::extract_text_by_pages(&file)).await;
+    let native = match extracted {
+        Ok(Ok(pages)) if !pages.is_empty() && !blank(&pages) => Some(pages),
+        _ => None,
+    };
+    let mut pages = match native {
+        Some(pages) => pages,
+        None => {
+            db.stage(id, "Extraction · pdftotext")?;
+            match pdftotext_pages(path).await {
+                Ok(pages) if !pages.is_empty() => pages,
+                _ => {
+                    let info = command("pdfinfo", &[path.display().to_string()], 60).await?;
+                    let count = info
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("Pages:")
+                                .and_then(|s| s.trim().parse::<usize>().ok())
+                        })
+                        .ok_or("Cannot determine the PDF page count.")?;
+                    if count > 10000 {
+                        return Err("PDF capped at 10,000 pages per source.".into());
+                    }
+                    vec![String::new(); count]
+                }
             }
-            vec![String::new(); count]
         }
     };
     let count = pages.len();
