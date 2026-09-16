@@ -504,6 +504,11 @@ export default function App() {
           : ["queued", "processing"].includes(d.status))),
   );
   const retriable = visibleDocs.filter((d) => d.status === "error");
+  // The error chip carries the filter, so it must not stay on once every
+  // source has been processed again.
+  useEffect(() => {
+    if (!failed && statusFilter === "error") setStatusFilter("all");
+  }, [failed, statusFilter]);
   const activeNav = navigation.find((n) => n.id === page)!;
   return (
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
