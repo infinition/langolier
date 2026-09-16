@@ -2,6 +2,14 @@ pub mod assistant;
 pub mod bundle;
 pub mod db;
 #[cfg(feature = "desktop")]
+mod cmd_assistants;
+#[cfg(feature = "desktop")]
+mod cmd_chat;
+#[cfg(feature = "desktop")]
+mod cmd_sources;
+#[cfg(feature = "desktop")]
+mod cmd_watches;
+#[cfg(feature = "desktop")]
 mod desktop;
 pub mod engine;
 pub mod ingest;

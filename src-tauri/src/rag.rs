@@ -469,7 +469,7 @@ mod tests {
         let solid = "a".repeat(500);
         let c = chunk(&solid, 100, 20);
         assert!(c.len() >= 5);
-        assert_eq!(c.concat().chars().filter(|c| *c == 'a').count() >= 500, true);
+        assert!(c.concat().chars().filter(|c| *c == 'a').count() >= 500);
         // A pathological overlap must still terminate, one step at a time.
         let dense = "mot ".repeat(400);
         assert!(chunk(&dense, 50, 49).len() <= dense.chars().count())

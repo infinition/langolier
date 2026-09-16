@@ -1,14 +1,8 @@
 //! Desktop application: Tauri commands and window handling.
-use crate::db::{err, now, Db, Res, Settings};
+use crate::db::{err, Db, Res, Settings};
 use rusqlite::params;
 use serde_json::{json, Value};
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Instant,
-};
+use std::sync::{atomic::AtomicBool, Arc};
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -77,10 +71,10 @@ fn apply_autostart(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
     }
     Ok(())
 }
-struct AppState {
-    db: Db,
-    cancel: Arc<AtomicBool>,
-    generation: tokio::sync::Mutex<()>,
+pub(crate) struct AppState {
+    pub(crate) db: Db,
+    pub(crate) cancel: Arc<AtomicBool>,
+    pub(crate) generation: tokio::sync::Mutex<()>,
 }
 #[tauri::command]
 fn snapshot(state: State<AppState>) -> Res<Value> {
@@ -236,89 +230,6 @@ async fn health(state: State<'_, AppState>) -> Res<Value> {
     )
 }
 #[tauri::command]
-async fn import_files(state: State<'_, AppState>, paths: Vec<String>) -> Res<Value> {
-    let db = state.db.clone();
-    tokio::task::spawn_blocking(move || crate::ingest::queue(&db, paths))
-        .await
-        .map_err(err)?
-}
-#[tauri::command]
-fn import_text(state: State<AppState>, title: String, text: String) -> Res<Value> {
-    crate::ingest::paste(&state.db, &title, &text)
-}
-#[tauri::command]
-fn import_url(state: State<AppState>, url: String) -> Res<Value> {
-    crate::ingest::queue_url(&state.db, &url)
-}
-#[tauri::command]
-fn retry_document(state: State<AppState>, id: String) -> Res<()> {
-    let c = state.db.conn()?;
-    let changed=c.execute("UPDATE documents SET status='queued',stage='Queued',error=NULL,updated=?2 WHERE id=?1 AND status!='processing'",params![id,now()]).map_err(err)?;
-    if changed == 0 {
-        return Err("Source missing or already processing".into());
-    }
-    Ok(())
-}
-#[tauri::command]
-fn delete_document(state: State<AppState>, id: String) -> Res<()> {
-    let n = state
-        .db
-        .conn()?
-        .execute(
-            "DELETE FROM documents WHERE id=?1 AND status!='processing'",
-            [id],
-        )
-        .map_err(err)?;
-    if n == 0 {
-        return Err("Attendez la fin du traitement avant de retirer cette source.".into());
-    }
-    Ok(())
-}
-/// Queues several sources again at once, typically every source left in error.
-#[tauri::command]
-fn retry_documents(state: State<AppState>, ids: Vec<String>) -> Res<Value> {
-    if ids.is_empty() || ids.len() > 20000 {
-        return Err("Selection empty or too large.".into());
-    }
-    let mut c = state.db.conn()?;
-    let tx = c.transaction().map_err(err)?;
-    let mut queued = 0usize;
-    for id in &ids {
-        queued+=tx.execute("UPDATE documents SET status='queued',stage='Queued',error=NULL,updated=?2 WHERE id=?1 AND status!='processing'",params![id,now()]).map_err(err)?;
-    }
-    tx.commit().map_err(err)?;
-    Ok(json!({"queued": queued, "busy": ids.len() - queued}))
-}
-/// Removes several sources from the index at once.
-#[tauri::command]
-fn delete_documents(state: State<AppState>, ids: Vec<String>) -> Res<Value> {
-    if ids.is_empty() || ids.len() > 20000 {
-        return Err("Selection empty or too large.".into());
-    }
-    let mut c = state.db.conn()?;
-    let tx = c.transaction().map_err(err)?;
-    let mut removed = 0usize;
-    for id in &ids {
-        removed += tx
-            .execute(
-                "DELETE FROM documents WHERE id=?1 AND status!='processing'",
-                [id],
-            )
-            .map_err(err)?;
-    }
-    tx.commit().map_err(err)?;
-    Ok(json!({"removed": removed, "busy": ids.len() - removed}))
-}
-#[tauri::command]
-fn document_chunks(state: State<AppState>, id: String) -> Res<Vec<Value>> {
-    let c = state.db.conn()?;
-    let mut st = c
-        .prepare("SELECT id,text,locator FROM chunks WHERE doc_id=?1 ORDER BY ordinal LIMIT 500")
-        .map_err(err)?;
-    let rows=st.query_map([id],|r|Ok(json!({"id":r.get::<_,i64>(0)?,"text":r.get::<_,String>(1)?,"locator":r.get::<_,String>(2)?}))).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;
-    Ok(rows)
-}
-#[tauri::command]
 fn delete_conversation(state: State<AppState>, id: String) -> Res<()> {
     let _guard = state
         .generation
@@ -333,320 +244,6 @@ fn delete_conversation(state: State<AppState>, id: String) -> Res<()> {
         return Err("Conversation not found".into());
     }
     Ok(())
-}
-/// Recomputes vectors for edited passages with the same model.
-async fn reembed(db: &Db, ids: &[i64]) -> Res<Option<String>> {
-    let s = db.settings()?;
-    let mut rows = vec![];
-    {
-        let c = db.conn()?;
-        for id in ids {
-            let row = c.query_row("SELECT ch.id,d.name,ch.locator,ch.text FROM chunks ch JOIN documents d ON d.id=ch.doc_id WHERE ch.id=?1",[id],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?))).map_err(err)?;
-            rows.push(row);
-        }
-        c.execute(
-            &format!(
-                "UPDATE chunks SET embedding=NULL,embedding_model=NULL WHERE id IN ({})",
-                ids.iter()
-                    .map(|i| i.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ),
-            [],
-        )
-        .map_err(err)?;
-    }
-    for batch in rows.chunks(16) {
-        let texts = batch
-            .iter()
-            .map(|(_, name, l, t)| format!("Document: {name}\nSection: {l}\n{t}"))
-            .collect::<Vec<_>>();
-        match crate::llm::embeddings(&s, &texts).await {
-            Ok(vectors) => {
-                let mut c = db.conn()?;
-                let tx = c.transaction().map_err(err)?;
-                for ((id, ..), v) in batch.iter().zip(vectors) {
-                    tx.execute(
-                        "UPDATE chunks SET embedding=?2,embedding_model=?3 WHERE id=?1",
-                        params![id, crate::rag::encode(&v), crate::rag::embedding_key(&s)],
-                    )
-                    .map_err(err)?;
-                }
-                tx.commit().map_err(err)?;
-            }
-            Err(e) => {
-                return Ok(Some(format!(
-                    "Text saved, lexical index up to date. Vectors not recomputed: {e}"
-                )))
-            }
-        }
-    }
-    Ok(None)
-}
-#[tauri::command]
-async fn update_chunk(state: State<'_, AppState>, id: i64, text: String) -> Res<Value> {
-    let text = text.trim().to_string();
-    if text.is_empty() || text.chars().count() > 20000 {
-        return Err("The passage must hold between 1 and 20,000 characters.".into());
-    }
-    let n = state
-        .db
-        .conn()?
-        .execute("UPDATE chunks SET text=?2 WHERE id=?1", params![id, text])
-        .map_err(err)?;
-    if n == 0 {
-        return Err("Passage not found".into());
-    }
-    let warning = reembed(&state.db, &[id]).await?;
-    Ok(json!({"updated": 1, "warning": warning}))
-}
-/// Proposes a fix for one passage without saving anything.
-#[tauri::command]
-async fn polish_chunk(state: State<'_, AppState>, id: i64) -> Res<Value> {
-    let s = state.db.settings()?;
-    let (name, text): (String, String) = state
-        .db
-        .conn()?
-        .query_row("SELECT d.name,ch.text FROM chunks ch JOIN documents d ON d.id=ch.doc_id WHERE ch.id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
-        .map_err(err)?;
-    let proposal = crate::llm::polish(&s, &name, &text, Arc::new(AtomicBool::new(false))).await?;
-    Ok(json!({"proposal": proposal, "changed": proposal != text}))
-}
-/// Fixes a whole source, passage by passage, with progress.
-#[tauri::command]
-async fn polish_document(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    doc_id: String,
-) -> Res<Value> {
-    let _guard = state
-        .generation
-        .try_lock()
-        .map_err(|_| "A generation is already running")?;
-    state.cancel.store(false, Ordering::Relaxed);
-    let s = state.db.settings()?;
-    let name: String = state
-        .db
-        .conn()?
-        .query_row("SELECT name FROM documents WHERE id=?1", [&doc_id], |r| {
-            r.get(0)
-        })
-        .map_err(err)?;
-    let rows = {
-        let c = state.db.conn()?;
-        let mut st = c
-            .prepare("SELECT id,text FROM chunks WHERE doc_id=?1 ORDER BY ordinal")
-            .map_err(err)?;
-        let rows = st
-            .query_map([&doc_id], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-            })
-            .map_err(err)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(err)?;
-        rows
-    };
-    let total = rows.len();
-    let mut changed = vec![];
-    let mut rejected = 0usize;
-    for (done, (id, text)) in rows.into_iter().enumerate() {
-        if state.cancel.load(Ordering::Relaxed) {
-            break;
-        }
-        let _ = app.emit(
-            "polish-progress",
-            json!({"doc_id": doc_id, "done": done, "total": total, "changed": changed.len()}),
-        );
-        match crate::llm::polish(&s, &name, &text, state.cancel.clone()).await {
-            Ok(p) if p != text => {
-                state
-                    .db
-                    .conn()?
-                    .execute("UPDATE chunks SET text=?2 WHERE id=?1", params![id, p])
-                    .map_err(err)?;
-                changed.push(id);
-            }
-            Ok(_) => {}
-            Err(e) if e.contains("cancelled") => break,
-            Err(_) => rejected += 1,
-        }
-    }
-    let _ = app.emit(
-        "polish-progress",
-        json!({"doc_id": doc_id, "done": total, "total": total, "changed": changed.len()}),
-    );
-    let warning = if changed.is_empty() {
-        None
-    } else {
-        reembed(&state.db, &changed).await?
-    };
-    Ok(
-        json!({"chunks": total, "changed": changed.len(), "rejected": rejected, "cancelled": state.cancel.load(Ordering::Relaxed), "warning": warning}),
-    )
-}
-/// Replacement limited to a list of passages.
-#[tauri::command]
-async fn replace_in_chunks(
-    state: State<'_, AppState>,
-    ids: Vec<i64>,
-    from: String,
-    to: String,
-) -> Res<Value> {
-    if from.is_empty()
-        || from.chars().count() > 500
-        || to.chars().count() > 500
-        || ids.is_empty()
-        || ids.len() > 2000
-    {
-        return Err("Selection empty or text out of range.".into());
-    }
-    let mut changed = vec![];
-    let mut occurrences = 0usize;
-    {
-        let mut c = state.db.conn()?;
-        let tx = c.transaction().map_err(err)?;
-        for id in &ids {
-            let text: String = tx
-                .query_row("SELECT text FROM chunks WHERE id=?1", [id], |r| r.get(0))
-                .map_err(err)?;
-            let count = text.matches(&from).count();
-            if count == 0 {
-                continue;
-            }
-            let replaced = text.replace(&from, &to);
-            if replaced.trim().is_empty() {
-                return Err("The replacement would empty a passage; delete it instead.".into());
-            }
-            tx.execute(
-                "UPDATE chunks SET text=?2 WHERE id=?1",
-                params![id, replaced],
-            )
-            .map_err(err)?;
-            occurrences += count;
-            changed.push(*id);
-        }
-        tx.commit().map_err(err)?;
-    }
-    let warning = if changed.is_empty() {
-        None
-    } else {
-        reembed(&state.db, &changed).await?
-    };
-    Ok(json!({"chunks": changed.len(), "occurrences": occurrences, "warning": warning}))
-}
-#[tauri::command]
-fn delete_chunk(state: State<AppState>, id: i64) -> Res<()> {
-    let n = state
-        .db
-        .conn()?
-        .execute("DELETE FROM chunks WHERE id=?1", [id])
-        .map_err(err)?;
-    if n == 0 {
-        return Err("Passage not found".into());
-    }
-    Ok(())
-}
-/// Replaces text across a source's passages, or across everything.
-#[tauri::command]
-async fn replace_in_document(
-    state: State<'_, AppState>,
-    doc_id: String,
-    from: String,
-    to: String,
-    apply: bool,
-) -> Res<Value> {
-    if from.is_empty() || from.chars().count() > 500 || to.chars().count() > 500 {
-        return Err("The text to replace must hold between 1 and 500 characters.".into());
-    }
-    let mut changed = vec![];
-    let mut occurrences = 0usize;
-    {
-        let c = state.db.conn()?;
-        let mut st = c
-            .prepare("SELECT id,text FROM chunks WHERE (?1='' OR doc_id=?1) AND instr(text,?2)>0")
-            .map_err(err)?;
-        let rows = st
-            .query_map(params![doc_id, from], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-            })
-            .map_err(err)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(err)?;
-        for (id, text) in rows {
-            let count = text.matches(&from).count();
-            if count == 0 {
-                continue;
-            }
-            occurrences += count;
-            changed.push((id, text.replace(&from, &to)));
-        }
-        if apply {
-            let mut c = state.db.conn()?;
-            let tx = c.transaction().map_err(err)?;
-            for (id, text) in &changed {
-                if text.trim().is_empty() {
-                    return Err("The replacement would empty a passage; delete it instead.".into());
-                }
-                tx.execute("UPDATE chunks SET text=?2 WHERE id=?1", params![id, text])
-                    .map_err(err)?;
-            }
-            tx.commit().map_err(err)?;
-        }
-    }
-    let ids = changed.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-    let warning = if apply && !ids.is_empty() {
-        reembed(&state.db, &ids).await?
-    } else {
-        None
-    };
-    Ok(
-        json!({"chunks": ids.len(), "occurrences": occurrences, "applied": apply, "warning": warning}),
-    )
-}
-#[tauri::command]
-fn add_watch(
-    state: State<AppState>,
-    path: String,
-    mode: String,
-    recursive: bool,
-    interval: Option<i64>,
-) -> Res<Value> {
-    crate::watch::add(
-        &state.db,
-        &path,
-        &mode,
-        recursive,
-        interval.filter(|v| *v > 0),
-    )
-}
-#[tauri::command]
-fn update_watch(
-    state: State<AppState>,
-    id: String,
-    enabled: Option<bool>,
-    mode: Option<String>,
-    recursive: Option<bool>,
-    interval: Option<i64>,
-) -> Res<()> {
-    crate::watch::update(
-        &state.db,
-        &id,
-        enabled,
-        mode.as_deref(),
-        recursive,
-        interval.map(|v| (v > 0).then_some(v)),
-    )
-}
-#[tauri::command]
-fn delete_watch(state: State<AppState>, id: String, forget: bool) -> Res<Value> {
-    crate::watch::remove(&state.db, &id, forget)
-}
-#[tauri::command]
-async fn scan_watch(state: State<'_, AppState>, id: String) -> Res<Value> {
-    let db = state.db.clone();
-    tokio::task::spawn_blocking(move || crate::watch::scan(&db, &id))
-        .await
-        .map_err(err)?
 }
 #[tauri::command]
 fn new_conversation(state: State<AppState>, assistant_id: Option<String>) -> Res<String> {
@@ -748,277 +345,6 @@ fn embed_models() -> Vec<Value> {
         .iter()
         .map(|m| json!({"tag": m.tag, "label": m.label, "dims": m.dims, "gguf_file": m.gguf_file}))
         .collect()
-}
-#[tauri::command]
-async fn telegram_check(token: String) -> Res<Value> {
-    crate::telegram::check(&token).await
-}
-fn key_hint(key: &str) -> String {
-    let n = key.chars().count();
-    if n <= 6 {
-        return "•".repeat(n);
-    }
-    format!(
-        "{}…{}",
-        key.chars().take(3).collect::<String>(),
-        key.chars().skip(n - 4).collect::<String>()
-    )
-}
-#[tauri::command]
-fn api_keys(state: State<AppState>) -> Res<Vec<Value>> {
-    let c = state.db.conn()?;
-    let mut st = c
-        .prepare("SELECT id,label,provider,key,created FROM api_keys ORDER BY label")
-        .map_err(err)?;
-    let rows = st
-        .query_map([], |r| {
-            let key: String = r.get(3)?;
-            Ok(json!({"id": r.get::<_, String>(0)?, "label": r.get::<_, String>(1)?, "provider": r.get::<_, String>(2)?, "hint": key_hint(&key), "created": r.get::<_, i64>(4)?}))
-        })
-        .map_err(err)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(err)?;
-    Ok(rows)
-}
-#[tauri::command]
-fn save_api_key(
-    state: State<AppState>,
-    label: String,
-    provider: String,
-    key: String,
-) -> Res<Value> {
-    let (label, key) = (label.trim().to_string(), key.trim().to_string());
-    if label.is_empty() || label.chars().count() > 60 {
-        return Err("Give this key a short name.".into());
-    }
-    if key.len() < 8 || key.len() > 400 {
-        return Err("This key is not a plausible length.".into());
-    }
-    let id = uuid::Uuid::new_v4().to_string();
-    state
-        .db
-        .conn()?
-        .execute(
-            "INSERT INTO api_keys(id,label,provider,key,created) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(label) DO UPDATE SET provider=excluded.provider,key=excluded.key",
-            params![id, label, provider.trim(), key, now()],
-        )
-        .map_err(err)?;
-    Ok(json!({"label": label, "hint": key_hint(&key)}))
-}
-#[tauri::command]
-fn delete_api_key(state: State<AppState>, id: String) -> Res<()> {
-    let n = state
-        .db
-        .conn()?
-        .execute("DELETE FROM api_keys WHERE id=?1", [id])
-        .map_err(err)?;
-    if n == 0 {
-        return Err("Key not found".into());
-    }
-    Ok(())
-}
-/// Returns the full key to drop into settings or a profile.
-#[tauri::command]
-fn use_api_key(state: State<AppState>, id: String) -> Res<String> {
-    state
-        .db
-        .conn()?
-        .query_row("SELECT key FROM api_keys WHERE id=?1", [id], |r| r.get(0))
-        .map_err(|_| "Key not found".to_string())
-}
-#[tauri::command]
-fn save_assistant(
-    state: State<AppState>,
-    assistant: crate::assistant::Assistant,
-) -> Res<crate::assistant::Assistant> {
-    crate::assistant::save(&state.db, assistant)
-}
-#[tauri::command]
-fn delete_assistant(state: State<AppState>, id: String) -> Res<()> {
-    let mut s = state.db.settings()?;
-    if s.active_assistant == id {
-        s.active_assistant.clear();
-        state.db.set_settings(&s)?;
-    }
-    crate::assistant::remove(&state.db, &id)
-}
-#[tauri::command]
-fn set_active_assistant(state: State<AppState>, id: String) -> Res<()> {
-    if !id.is_empty() && crate::assistant::get(&state.db, &id)?.is_none() {
-        return Err("Assistant not found".into());
-    }
-    let mut s = state.db.settings()?;
-    s.active_assistant = id;
-    state.db.set_settings(&s)
-}
-#[tauri::command]
-fn messages(state: State<AppState>, id: String) -> Res<Vec<Value>> {
-    let c = state.db.conn()?;
-    let mut st=c.prepare("SELECT id,role,content,sources,feedback FROM messages WHERE conversation_id=?1 ORDER BY rowid").map_err(err)?;
-    let rows=st.query_map([id],|r|{let sources:String=r.get(3)?;Ok(json!({"id":r.get::<_,String>(0)?,"role":r.get::<_,String>(1)?,"content":r.get::<_,String>(2)?,"sources":serde_json::from_str::<Value>(&sources).unwrap_or(json!([])),"feedback":r.get::<_,Option<i64>>(4)?}))}).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;
-    Ok(rows)
-}
-#[tauri::command]
-fn feedback(state: State<AppState>, id: String, value: i64) -> Res<()> {
-    if value != 1 && value != -1 {
-        return Err("Invalid rating".into());
-    }
-    state
-        .db
-        .conn()?
-        .execute(
-            "UPDATE messages SET feedback=?2 WHERE id=?1 AND role='assistant'",
-            params![id, value],
-        )
-        .map_err(err)?;
-    Ok(())
-}
-#[tauri::command]
-fn cancel_chat(state: State<AppState>) {
-    state.cancel.store(true, Ordering::Relaxed);
-}
-#[tauri::command]
-async fn chat(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    conversation_id: String,
-    question: String,
-    mode: String,
-    assisted: bool,
-    assistant_id: Option<String>,
-) -> Res<Value> {
-    let _guard = state
-        .generation
-        .try_lock()
-        .map_err(|_| "A generation is already running")?;
-    state.cancel.store(false, Ordering::Relaxed);
-    let db = &state.db;
-    let base = db.settings()?;
-    // The requested profile, else the conversation's, else the active one.
-    let wanted = match assistant_id {
-        Some(a) => a,
-        None => db
-            .conn()?
-            .query_row(
-                "SELECT coalesce(assistant_id,'') FROM conversations WHERE id=?1",
-                [&conversation_id],
-                |r| r.get::<_, String>(0),
-            )
-            .unwrap_or_default(),
-    };
-    let wanted = if wanted.is_empty() {
-        base.active_assistant.clone()
-    } else {
-        wanted
-    };
-    let profile = crate::assistant::get(db, &wanted)?;
-    let s = crate::assistant::effective(&base, profile.as_ref())?;
-    let emit = move |kind: &str, payload: Value| {
-        let _ = app.emit(&format!("chat-{kind}"), payload);
-    };
-    crate::pipeline::answer(
-        db,
-        &s,
-        profile.as_ref(),
-        &conversation_id,
-        &question,
-        &mode,
-        assisted,
-        state.cancel.clone(),
-        &emit,
-    )
-    .await
-}
-#[tauri::command]
-async fn search_sources(state: State<'_, AppState>, query: String, mode: String) -> Res<Value> {
-    let s = state.db.settings()?;
-    let start = Instant::now();
-    let (sources, warning) = crate::rag::retrieve(&state.db, &query, &s, &mode, None).await?;
-    Ok(json!({"sources":sources,"warning":warning,"latency_ms":start.elapsed().as_millis()}))
-}
-#[tauri::command]
-fn add_evaluation(state: State<AppState>, question: String, expected_document: String) -> Res<()> {
-    if question.trim().is_empty() {
-        return Err("Empty question".into());
-    }
-    let c = state.db.conn()?;
-    let n: i64 = c
-        .query_row(
-            "SELECT count(*) FROM documents WHERE id=?1",
-            [&expected_document],
-            |r| r.get(0),
-        )
-        .map_err(err)?;
-    if n == 0 {
-        return Err("Select an existing source".into());
-    }
-    c.execute(
-        "INSERT INTO evaluations VALUES(?1,?2,?3)",
-        params![
-            uuid::Uuid::new_v4().to_string(),
-            question,
-            expected_document
-        ],
-    )
-    .map_err(err)?;
-    Ok(())
-}
-#[tauri::command]
-fn delete_evaluation(state: State<AppState>, id: String) -> Res<()> {
-    state
-        .db
-        .conn()?
-        .execute("DELETE FROM evaluations WHERE id=?1", [id])
-        .map_err(err)?;
-    Ok(())
-}
-#[tauri::command]
-async fn run_evaluations(state: State<'_, AppState>) -> Res<Value> {
-    let s = state.db.settings()?;
-    let cases = crate::db::json_rows(&state.db, "SELECT * FROM evaluations")?;
-    if cases.is_empty() {
-        return Err("Add at least one reference question.".into());
-    }
-    let mut reports = vec![];
-    for mode in ["lexical", "semantic", "hybrid"] {
-        let start = Instant::now();
-        let (mut hits, mut rr, mut errors) = (0, 0.0, 0);
-        let mut rows = vec![];
-        for case in &cases {
-            let q = case["question"].as_str().unwrap_or("");
-            match crate::rag::retrieve(&state.db, q, &s, mode, None).await {
-                Ok((sources, warning)) => {
-                    if warning.is_some() {
-                        errors += 1;
-                    }
-                    let rank = sources
-                        .iter()
-                        .position(|v| v.doc_id == case["expected_document"].as_str().unwrap_or(""));
-                    if let Some(i) = rank {
-                        hits += 1;
-                        rr += 1.0 / (i + 1) as f64
-                    }
-                    rows.push(json!({"question":q,"rank":rank.map(|r|r+1),"warning":warning}));
-                }
-                Err(e) => {
-                    errors += 1;
-                    rows.push(json!({"question":q,"error":e}));
-                }
-            }
-        }
-        let report = json!({"mode":mode,"k":s.top_k,"n":cases.len(),"hit_at_k":hits as f64/cases.len()as f64,"mrr":rr/cases.len()as f64,"errors":errors,"latency_ms":start.elapsed().as_millis(),"cases":rows,"embedding_model":s.embedding_model});
-        state.db.log(
-            "evaluation",
-            &s.embedding_model,
-            if errors == 0 { "ok" } else { "degraded" },
-            start.elapsed().as_millis() as u64,
-            0,
-            None,
-            &report,
-        )?;
-        reports.push(report);
-    }
-    Ok(json!(reports))
 }
 #[tauri::command]
 fn export_data(state: State<AppState>, path: String, kind: String) -> Res<Value> {
@@ -1235,52 +561,52 @@ pub fn run() {
             snapshot,
             save_settings,
             health,
-            import_files,
-            import_text,
-            import_url,
-            retry_document,
-            retry_documents,
+            crate::cmd_sources::import_files,
+            crate::cmd_sources::import_text,
+            crate::cmd_sources::import_url,
+            crate::cmd_sources::retry_document,
+            crate::cmd_sources::retry_documents,
             reindex_all,
             reindex_documents,
             set_ingestion_paused,
             backup_database,
-            delete_document,
-            delete_documents,
-            document_chunks,
-            update_chunk,
-            polish_chunk,
-            polish_document,
-            delete_chunk,
-            replace_in_document,
-            replace_in_chunks,
+            crate::cmd_sources::delete_document,
+            crate::cmd_sources::delete_documents,
+            crate::cmd_sources::document_chunks,
+            crate::cmd_sources::update_chunk,
+            crate::cmd_sources::polish_chunk,
+            crate::cmd_sources::polish_document,
+            crate::cmd_sources::delete_chunk,
+            crate::cmd_sources::replace_in_document,
+            crate::cmd_sources::replace_in_chunks,
             new_conversation,
             delete_conversation,
             read_image_data_url,
             embed_models,
-            api_keys,
-            save_api_key,
-            delete_api_key,
-            use_api_key,
-            telegram_check,
-            save_assistant,
-            delete_assistant,
+            crate::cmd_assistants::api_keys,
+            crate::cmd_assistants::save_api_key,
+            crate::cmd_assistants::delete_api_key,
+            crate::cmd_assistants::use_api_key,
+            crate::cmd_assistants::telegram_check,
+            crate::cmd_assistants::save_assistant,
+            crate::cmd_assistants::delete_assistant,
             export_assistant,
-            set_active_assistant,
-            add_watch,
-            update_watch,
-            delete_watch,
-            scan_watch,
+            crate::cmd_assistants::set_active_assistant,
+            crate::cmd_watches::add_watch,
+            crate::cmd_watches::update_watch,
+            crate::cmd_watches::delete_watch,
+            crate::cmd_watches::scan_watch,
             open_palette,
             hide_palette,
             pause_shortcut,
-            messages,
-            feedback,
-            cancel_chat,
-            chat,
-            search_sources,
-            add_evaluation,
-            delete_evaluation,
-            run_evaluations,
+            crate::cmd_chat::messages,
+            crate::cmd_chat::feedback,
+            crate::cmd_chat::cancel_chat,
+            crate::cmd_chat::chat,
+            crate::cmd_chat::search_sources,
+            crate::cmd_chat::add_evaluation,
+            crate::cmd_chat::delete_evaluation,
+            crate::cmd_chat::run_evaluations,
             export_data,
             pull_model
         ])
@@ -1368,6 +694,7 @@ pub const ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use std::time::Instant;
     #[test]
     fn endpoint_policy_and_reference_bounds() {
         assert!(crate::llm::local_endpoint("http://127.0.0.1:1234/v1").is_ok());
