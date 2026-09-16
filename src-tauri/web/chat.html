@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#111310" />
 <title>Assistant</title>
 <style>
   /* Themes: each name sets its variables, the rest is shared. */
@@ -31,14 +36,17 @@
     --accent: #ff7a6e; --accent-ink: #2a0f0c; --user: #3a2226; --assistant: #24181b;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; height: 100%; overscroll-behavior: none; }
   body {
     background: var(--bg); color: var(--text);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", sans-serif;
     display: flex; flex-direction: column; min-height: 100vh;
+    /* dvh follows the iOS keyboard and address bar; vh is the fallback. */
+    min-height: 100dvh;
   }
   header {
-    display: flex; align-items: center; gap: 14px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 14px;
+    padding: calc(14px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 14px calc(20px + env(safe-area-inset-left));
     border-bottom: 1px solid var(--line); background: var(--panel);
   }
   .avatar {
@@ -50,8 +58,11 @@
   header h1 { margin: 0; font-size: 16px; font-weight: 600; }
   header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
   header .new { margin-left: auto; }
-  main { flex: 1; overflow: auto; padding: 22px 0 10px; }
-  .thread { max-width: 780px; margin: 0 auto; padding: 0 20px; display: flex; flex-direction: column; gap: 14px; }
+  main { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 22px 0 10px; }
+  .thread {
+    max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;
+    padding: 0 calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
+  }
   .msg { display: flex; gap: 10px; align-items: flex-end; animation: in .22s ease-out; }
   .msg.user { flex-direction: row-reverse; }
   .msg .avatar { width: 28px; height: 28px; border-radius: 9px; font-size: 13px; }
@@ -66,7 +77,10 @@
   .sources { font-size: 11.5px; color: var(--muted); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
   .phase { color: var(--muted); font-size: 13px; animation: pulse 1.4s infinite; }
   .caret { display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink .9s steps(2) infinite; }
-  footer { padding: 12px 20px 18px; background: var(--panel); border-top: 1px solid var(--line); }
+  footer {
+    padding: 12px calc(20px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+    background: var(--panel); border-top: 1px solid var(--line);
+  }
   form { max-width: 780px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
   textarea {
     flex: 1; resize: none; min-height: 46px; max-height: 160px; padding: 12px 14px; border-radius: 14px;

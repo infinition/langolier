@@ -6,10 +6,10 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Duration;
+use std::sync::{atomic::AtomicBool, Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, RwLock};
@@ -77,6 +77,7 @@ struct App {
     /// One generation at a time, web page and Telegram bridge together.
     generation_shared: Arc<Mutex<()>>,
     lockout: Mutex<Lockout>,
+    chat_rate: StdMutex<HashMap<IpAddr, Vec<Instant>>>,
 }
 /// Wrong admin secrets: five strikes, then a fifteen minute pause.
 #[derive(Default)]
@@ -86,6 +87,28 @@ struct Lockout {
 }
 const LOCKOUT_STRIKES: u32 = 5;
 const LOCKOUT_PAUSE: Duration = Duration::from_secs(15 * 60);
+/// Answering costs a whole model run, so one address gets a handful per
+/// minute. It shields the machine when the page is served to a network.
+const ASK_BURST: usize = 12;
+const ASK_WINDOW: Duration = Duration::from_secs(60);
+/// Records a question and says whether it is over the allowance.
+fn over_chat_rate(app: &App, who: IpAddr) -> bool {
+    let now = Instant::now();
+    let Ok(mut seen) = app.chat_rate.lock() else {
+        return false;
+    };
+    // Addresses that stopped asking must not pile up in memory.
+    if seen.len() > 4096 {
+        seen.retain(|_, hits| hits.iter().any(|t| now.duration_since(*t) < ASK_WINDOW));
+    }
+    let hits = seen.entry(who).or_default();
+    hits.retain(|t| now.duration_since(*t) < ASK_WINDOW);
+    if hits.len() >= ASK_BURST {
+        return true;
+    }
+    hits.push(now);
+    false
+}
 const IMPORT_MAX: u64 = 1 << 30;
 pub fn main(args: Args) -> i32 {
     if args.gui {
@@ -414,6 +437,7 @@ pub async fn serve_with(args: Args, ready: impl FnOnce(Ready) + Send + 'static) 
         swap: RwLock::new(()),
         generation_shared: shared,
         lockout: Mutex::new(Lockout::default()),
+        chat_rate: StdMutex::new(HashMap::new()),
     });
     // Telegram bridge when the profile carries a token. LANGOLIER_DISABLE_TELEGRAM=1
     // keeps a test or a second instance from stealing the bot's updates.
@@ -509,10 +533,10 @@ pub async fn serve_with(args: Args, ready: impl FnOnce(Ready) + Send + 'static) 
         });
     }
     loop {
-        let (stream, _) = listener.accept().await.map_err(err)?;
+        let (stream, peer) = listener.accept().await.map_err(err)?;
         let app = app.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle(stream, app).await {
+            if let Err(e) = handle(stream, app, peer.ip()).await {
                 eprintln!("Request: {e}");
             }
         });
@@ -754,8 +778,21 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).to_string()
 }
 async fn respond(w: &mut TcpStream, status: &str, content_type: &str, body: &[u8]) -> Res<()> {
+    respond_with(w, status, content_type, body, &[]).await
+}
+async fn respond_with(
+    w: &mut TcpStream,
+    status: &str,
+    content_type: &str,
+    body: &[u8],
+    extra: &[(&str, &str)],
+) -> Res<()> {
+    let mut headers = String::new();
+    for (name, value) in extra {
+        headers.push_str(&format!("{name}: {value}\r\n"));
+    }
     let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: strict-origin-when-cross-origin\r\nX-Frame-Options: DENY\r\n{headers}Connection: close\r\n\r\n",
         body.len()
     );
     w.write_all(head.as_bytes()).await.map_err(err)?;
@@ -780,7 +817,18 @@ async fn json_err(w: &mut TcpStream, status: &str, msg: &str) -> Res<()> {
     )
     .await
 }
-async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
+/// The page and the policy that lets it run: one nonce per response, so the
+/// inline style and script need no unsafe-inline.
+fn page_with_nonce(nonce: &str) -> (String, String) {
+    let page = PAGE
+        .replacen("<style>", &format!("<style nonce=\"{nonce}\">"), 1)
+        .replacen("<script>", &format!("<script nonce=\"{nonce}\">"), 1);
+    let csp = format!(
+        "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    );
+    (page, csp)
+}
+async fn handle(stream: TcpStream, app: Arc<App>, peer: IpAddr) -> Res<()> {
     let mut reader = BufReader::new(stream);
     let mut req = read_head(&mut reader).await?;
     if req.path.starts_with("/api/admin/") {
@@ -791,11 +839,13 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
     let _r = app.swap.read().await;
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/") | ("GET", "/index.html") => {
-            respond(
+            let (page, csp) = page_with_nonce(&uuid::Uuid::new_v4().simple().to_string());
+            respond_with(
                 &mut w,
                 "200 OK",
                 "text/html; charset=utf-8",
-                PAGE.as_bytes(),
+                page.as_bytes(),
+                &[("Content-Security-Policy", csp.as_str())],
             )
             .await
         }
@@ -834,7 +884,17 @@ async fn handle(stream: TcpStream, app: Arc<App>) -> Res<()> {
             };
             json_ok(&mut w, Value::Array(rows)).await
         }
-        ("POST", "/api/chat") => chat(&mut w, &req, &app).await,
+        ("POST", "/api/chat") => {
+            if over_chat_rate(&app, peer) {
+                return json_err(
+                    &mut w,
+                    "429 Too Many Requests",
+                    "Too many questions in a row. Try again in a minute.",
+                )
+                .await;
+            }
+            chat(&mut w, &req, &app).await
+        }
         ("POST", "/api/ui/hide") => {
             hide_palette_window();
             json_ok(&mut w, json!({"ok": true})).await
@@ -1084,4 +1144,110 @@ async fn tx_event(w: &mut TcpStream, event: &str, payload: Value) -> Res<()> {
     let frame = format!("event: {event}\ndata: {}\n\n", payload);
     w.write_all(frame.as_bytes()).await.map_err(err)?;
     w.flush().await.map_err(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn app() -> Arc<App> {
+        let dir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+        Arc::new(App {
+            db: Db::new(dir.path()).unwrap(),
+            data_dir: dir.path().to_path_buf(),
+            swap: RwLock::new(()),
+            generation_shared: Arc::new(Mutex::new(())),
+            lockout: Mutex::new(Lockout::default()),
+            chat_rate: StdMutex::new(HashMap::new()),
+        })
+    }
+    /// Reads one HTTP response off a socket, head and body.
+    async fn roundtrip(app: Arc<App>, request: &str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, peer) = listener.accept().await.unwrap();
+            let _ = handle(stream, app, peer.ip()).await;
+        });
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        client.write_all(request.as_bytes()).await.unwrap();
+        client.flush().await.unwrap();
+        let mut answer = vec![];
+        client.read_to_end(&mut answer).await.unwrap();
+        server.await.unwrap();
+        String::from_utf8_lossy(&answer).to_string()
+    }
+    #[test]
+    fn ids_from_the_query_string_are_bounded() {
+        assert!(valid_id("abc-123"));
+        assert!(!valid_id(""));
+        assert!(!valid_id("../../etc/passwd"));
+        assert!(!valid_id("a b"));
+        assert!(!valid_id("'; DROP TABLE messages--"));
+        assert!(!valid_id(&"a".repeat(65)));
+        assert!(valid_id(&"a".repeat(64)))
+    }
+    /// The policy must name the nonce the page actually carries, and must not
+    /// fall back to unsafe-inline.
+    #[test]
+    fn page_policy_matches_the_page() {
+        let (page, csp) = page_with_nonce("abc123");
+        assert!(page.contains("<style nonce=\"abc123\">"));
+        assert!(page.contains("<script nonce=\"abc123\">"));
+        assert!(csp.contains("script-src 'nonce-abc123'"));
+        assert!(csp.contains("style-src 'nonce-abc123'"));
+        assert!(!csp.contains("unsafe-inline"));
+        assert!(csp.contains("frame-ancestors 'none'"));
+        // Avatars are data URIs, and nothing else may load.
+        assert!(csp.contains("img-src 'self' data:"));
+        assert!(csp.starts_with("default-src 'none'"))
+    }
+    #[test]
+    fn questions_are_rationed_per_address() {
+        let app = app();
+        let one: IpAddr = "10.0.0.1".parse().unwrap();
+        let two: IpAddr = "10.0.0.2".parse().unwrap();
+        for i in 0..ASK_BURST {
+            assert!(!over_chat_rate(&app, one), "question {i} refused too early");
+        }
+        assert!(over_chat_rate(&app, one), "the allowance never ran out");
+        // One noisy address must not silence the others.
+        assert!(!over_chat_rate(&app, two))
+    }
+    #[tokio::test]
+    async fn serves_the_page_with_its_policy() {
+        let answer = roundtrip(app(), "GET / HTTP/1.1\r\nHost: x\r\n\r\n").await;
+        assert!(answer.starts_with("HTTP/1.1 200 OK"));
+        assert!(answer.contains("Content-Security-Policy: default-src 'none'"));
+        assert!(answer.contains("Referrer-Policy: strict-origin-when-cross-origin"));
+        assert!(answer.contains("X-Content-Type-Options: nosniff"));
+        assert!(answer.contains("X-Frame-Options: DENY"));
+        assert!(answer.contains("<!doctype html>"))
+    }
+    #[tokio::test]
+    async fn unknown_paths_and_methods_are_refused() {
+        let answer = roundtrip(app(), "GET /secrets HTTP/1.1\r\nHost: x\r\n\r\n").await;
+        assert!(answer.starts_with("HTTP/1.1 404 Not Found"), "{answer}");
+        let answer = roundtrip(app(), "DELETE / HTTP/1.1\r\nHost: x\r\n\r\n").await;
+        assert!(answer.starts_with("HTTP/1.1 404 Not Found"), "{answer}")
+    }
+    #[tokio::test]
+    async fn a_bad_conversation_id_is_rejected_before_the_database() {
+        let answer = roundtrip(
+            app(),
+            "GET /api/messages?id=..%2F..%2Fetc HTTP/1.1\r\nHost: x\r\n\r\n",
+        )
+        .await;
+        assert!(answer.starts_with("HTTP/1.1 400 Bad Request"), "{answer}");
+        assert!(answer.contains("invalid id"))
+    }
+    /// Administration is off by default: the routes must not even exist.
+    #[tokio::test]
+    async fn admin_routes_are_absent_until_enabled() {
+        let answer = roundtrip(
+            app(),
+            "POST /api/admin/list HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
+        )
+        .await;
+        assert!(answer.starts_with("HTTP/1.1 404 Not Found"), "{answer}")
+    }
 }
