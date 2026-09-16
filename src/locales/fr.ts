@@ -49,6 +49,7 @@ export const FR: Record<string, string> = {
   "The raw material.": "La matière première.",
   "Every source becomes a starting point. Your memory grows with you.":
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
+  Send: "Envoyer",
   "Queue up to date": "File à jour",
   "Raw search thresholds, before the judge: minimum cosine":
     "Seuils de recherche bruts, avant le juge : cosinus minimal",

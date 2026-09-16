@@ -1,17 +1,17 @@
 import { test, expect } from "@playwright/test";
 test("source paste dialog preserves input between tabs", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Coller un texte" }).click();
-  await page.getByLabel("Titre de la source").fill("Transformer notes");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Source title").fill("Transformer notes");
   await page
-    .getByLabel("Votre texte", { exact: true })
+    .getByLabel("Your text", { exact: true })
     .fill("Attention computes weighted combinations of values.");
   await expect(
     page.getByRole("button", { name: "Add to my memory" }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "Video link", exact: true }).click();
   await page.getByRole("button", { name: "Pasted text", exact: true }).click();
-  await expect(page.getByLabel("Votre texte", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Your text", { exact: true })).toHaveValue(
     "Attention computes weighted combinations of values.",
   );
   await page.keyboard.press("Escape");
@@ -25,9 +25,9 @@ test("all primary views render without fabricated metrics or runtime errors", as
   await page.goto("/");
   for (const [nav, title] of [
     ["Sources", "The raw material."],
-    ["Observatoire", "Sous le capot."],
-    ["Laboratoire", "Le laboratoire."],
-    ["Moteurs", "Choisissez votre moteur."],
+    ["Observatory", "Under the hood."],
+    ["Laboratory", "The laboratory."],
+    ["Engines", "Choose your engine."],
   ]) {
     await page
       .locator("nav")
@@ -47,7 +47,7 @@ test("layout fits desktop and narrow native window", async ({ page }) => {
       ),
     ).toBeTruthy();
     await expect(
-      page.getByRole("button", { name: "Envoyer", exact: true }),
+      page.getByRole("button", { name: "Send", exact: true }),
     ).toBeVisible();
   }
 });
