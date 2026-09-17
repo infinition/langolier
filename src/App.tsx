@@ -388,7 +388,7 @@ export default function App() {
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => setPage("chat")}>
-          <Logo alive busy={ingesting} />
+          <Logo interactive busy={ingesting} />
           <span>
             langolier<span className="brand-dot">.</span>
           </span>

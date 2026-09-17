@@ -7,30 +7,28 @@ import { Library, X, FileText, ArrowUpRight, Copy, Check } from "lucide-react";
 import type { Source } from "../types";
 /// The creature, alive in the sidebar. It breathes on its own; `busy` makes it
 /// swallow documents, which is what ingestion looks like from the outside.
+/// Every mark is alive and breathes. Only the one that asks for it answers a
+/// click and eats while sources are ingested: the sidebar mark.
 export function Logo({
   small = false,
-  alive = false,
+  interactive = false,
   busy = false,
 }: {
   small?: boolean;
-  /// Only one of them breathes: the sidebar mark. A chat bubble carries a
-  /// still image, and no animation loop of its own.
-  alive?: boolean;
+  interactive?: boolean;
   busy?: boolean;
 }) {
-  if (!alive) {
-    return (
-      <img
-        className={`logo-symbol ${small ? "small" : ""}`}
-        src="/icon.png"
-        alt=""
-        draggable={false}
-      />
-    );
-  }
-  return <AliveLogo small={small} busy={busy} />;
+  return <AliveLogo small={small} interactive={interactive} busy={busy} />;
 }
-function AliveLogo({ small, busy }: { small: boolean; busy: boolean }) {
+function AliveLogo({
+  small,
+  interactive,
+  busy,
+}: {
+  small: boolean;
+  interactive: boolean;
+  busy: boolean;
+}) {
   const host = useRef<HTMLSpanElement>(null);
   const alive = useRef<ReturnType<typeof mountLangolier>>(null);
   useEffect(() => {
@@ -39,13 +37,15 @@ function AliveLogo({ small, busy }: { small: boolean; busy: boolean }) {
     return () => creature?.destroy();
   }, []);
   useEffect(() => {
-    alive.current?.setFeeding(busy);
-  }, [busy]);
+    alive.current?.setFeeding(interactive && busy);
+  }, [interactive, busy]);
   return (
     <span
       ref={host}
-      className={`logo-symbol logo-alive ${small ? "small" : ""}`}
-      onClick={() => alive.current?.feed(9)}
+      className={`logo-symbol logo-alive ${small ? "small" : ""} ${
+        interactive ? "feedable" : ""
+      }`}
+      onClick={interactive ? () => alive.current?.feed(9) : undefined}
       role="img"
       aria-label="Langolier"
     >

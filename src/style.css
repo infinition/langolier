@@ -4226,6 +4226,9 @@ mark.current {
   display: block;
   width: 100%;
   aspect-ratio: 1351 / 1164;
+}
+/* Only the sidebar mark invites a click. */
+.logo-alive.feedable {
   cursor: pointer;
 }
 .logo-alive .langolier__shadow {
