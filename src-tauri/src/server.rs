@@ -1166,9 +1166,36 @@ async fn ask(w: &mut TcpStream, req: &Request, app: &Arc<App>, s: &crate::db::Se
     )
     .await;
     match answered {
-        Ok(v) => json_ok(w, v).await,
+        Ok(mut v) => {
+            // A shortcut reads one field; walking the sources array in the
+            // Shortcuts editor is painful. "content" stays untouched for the
+            // spoken answer, "text" carries the same thing plus its citations.
+            v["text"] = json!(with_citations(&v));
+            json_ok(w, v).await
+        }
         Err(e) => json_err(w, "500 Internal Server Error", &e).await,
     }
+}
+/// The answer followed by the sources its [n] markers point at.
+fn with_citations(answered: &Value) -> String {
+    let content = answered["content"].as_str().unwrap_or_default();
+    let sources = match answered["sources"].as_array() {
+        Some(list) if !list.is_empty() => list,
+        _ => return content.to_string(),
+    };
+    let list = sources
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let name = s["name"].as_str().unwrap_or("?");
+            match s["locator"].as_str().unwrap_or_default() {
+                "" => format!("[{}] {name}", i + 1),
+                locator => format!("[{}] {name}, {locator}", i + 1),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("{content}\n\nSources\n{list}")
 }
 async fn chat(w: &mut TcpStream, req: &Request, app: &Arc<App>) -> Res<()> {
     let body: Value = serde_json::from_slice(&req.body).unwrap_or(json!({}));
@@ -1354,6 +1381,28 @@ mod tests {
         .await;
         assert!(answer.starts_with("HTTP/1.1 400 Bad Request"), "{answer}");
         assert!(answer.contains("invalid id"))
+    }
+    /// The spoken answer and the shown answer come from one place: the same
+    /// numbering, whatever the sources hold.
+    #[test]
+    fn citations_are_spelled_out_under_the_answer() {
+        let answered = json!({
+            "content": "L'eau se purifie par ebullition [1] ou filtration [2].",
+            "sources": [
+                {"name": "French-Edition.pdf", "locator": "Page 222"},
+                {"name": "Wiseman.pdf", "locator": ""},
+            ]
+        });
+        let text = with_citations(&answered);
+        assert!(text.starts_with("L'eau se purifie"));
+        assert!(text.contains("\n\nSources\n"));
+        assert!(text.contains("[1] French-Edition.pdf, Page 222"));
+        // No locator, no trailing comma.
+        assert!(text.contains("[2] Wiseman.pdf\n") || text.ends_with("[2] Wiseman.pdf"));
+        // Nothing to cite: the answer is returned as it stands.
+        let bare = json!({"content": "Je n'ai pas cette information.", "sources": []});
+        assert_eq!(with_citations(&bare), "Je n'ai pas cette information.");
+        assert_eq!(with_citations(&json!({})), "")
     }
     /// The local API answers nobody without the right bearer token, and never
     /// at all while no token is set.
