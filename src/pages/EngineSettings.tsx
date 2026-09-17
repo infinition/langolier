@@ -354,13 +354,40 @@ export default function EngineSettings({
             </div>
             <Library size={20} />
           </div>
-          <label>
-            {t('Ollama embedding server (or "embedded" for a local GGUF)')}
+          <label className="check inline-check">
             <input
-              value={s.embedding_endpoint}
-              onChange={(e) => field("embedding_endpoint", e.target.value)}
+              type="checkbox"
+              checked={s.embedding_endpoint.trim() === "embedded"}
+              onChange={(e) =>
+                field(
+                  "embedding_endpoint",
+                  // Leaving it exposes the address again, on the usual port.
+                  e.target.checked ? "embedded" : "http://127.0.0.1:11434",
+                )
+              }
             />
+            {t("Built-in embedding engine")}
+            <small>
+              {t(
+                "The GGUF runs inside Langolier, with nothing to start beside it. Uncheck to use a server of your own.",
+              )}
+            </small>
           </label>
+          {s.embedding_endpoint.trim() !== "embedded" && (
+            <label>
+              {t("Embedding server address")}
+              <input
+                value={s.embedding_endpoint}
+                onChange={(e) => field("embedding_endpoint", e.target.value)}
+                placeholder="http://127.0.0.1:11434"
+              />
+              <small>
+                {t(
+                  "An Ollama server, or anything speaking the same API. It has to be running when Langolier searches.",
+                )}
+              </small>
+            </label>
+          )}
           {s.embedding_endpoint.trim() === "embedded" ? (
             <label>
               {t("Embedding model (curated tag, or path to a GGUF file)")}

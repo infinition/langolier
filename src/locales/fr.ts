@@ -53,6 +53,12 @@ export const FR: Record<string, string> = {
   "The website": "Le site",
   "The source code": "Le code source",
   "Support the project": "Soutenir le projet",
+  "Built-in embedding engine": "Moteur d'embeddings intégré",
+  "The GGUF runs inside Langolier, with nothing to start beside it. Uncheck to use a server of your own.":
+    "Le GGUF tourne dans Langolier, sans rien à lancer à côté. Décochez pour utiliser votre propre serveur.",
+  "Embedding server address": "Adresse du serveur d'embeddings",
+  "An Ollama server, or anything speaking the same API. It has to be running when Langolier searches.":
+    "Un serveur Ollama, ou tout ce qui parle la même API. Il doit tourner quand Langolier cherche.",
   "In the background": "En arrière-plan",
   Processing: "Traitement",
   "How sources become passages and vectors":
