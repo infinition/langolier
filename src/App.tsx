@@ -428,7 +428,7 @@ export default function App() {
             <Plus size={16} /> {t("New conversation")}
           </button>
           {data.conversations.length ? (
-            data.conversations.slice(0, 8).map((c) => (
+            data.conversations.map((c) => (
               <div
                 key={c.id}
                 className={`history-item${conversation === c.id ? " selected" : ""}`}

@@ -295,8 +295,27 @@ nav button:hover {
 }
 .history {
   flex: 1;
-  min-height: 80px;
-  overflow: hidden;
+  /* A flex child only scrolls once it is allowed to shrink below its content. */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* Room for the scrollbar, so a title is never hidden under it. */
+  margin-right: -6px;
+  padding-right: 6px;
+}
+.history::-webkit-scrollbar {
+  width: 8px;
+}
+.history::-webkit-scrollbar-thumb {
+  background: #302d2a;
+  border-radius: 999px;
+}
+.history::-webkit-scrollbar-thumb:hover {
+  background: #403c38;
+}
+.history::-webkit-scrollbar-track {
+  background: transparent;
 }
 .history p {
   font-size: 11px;
