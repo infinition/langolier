@@ -69,9 +69,9 @@ code, kbd { font-family: var(--mono); font-size: .92em; }
   padding-top: env(safe-area-inset-top);
 }
 .topbar .shell { display: flex; align-items: center; gap: 14px; height: 58px; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--cream); font-weight: 600; letter-spacing: -.02em; }
+.brand { display: flex; align-items: center; gap: 14px; color: var(--cream); font-weight: 600; letter-spacing: -.02em; font-size: 30px; }
 .brand:hover { text-decoration: none; }
-.brand img { width: 26px; height: 26px; border-radius: 7px; display: block; }
+.brand .brand-mark { width: 78px; height: 78px; border-radius: 18px; display: block; }
 .brand .dot { color: var(--lime); }
 .tabs { display: flex; gap: 2px; margin-left: 10px; flex: 1; }
 .tabs a {
@@ -468,11 +468,11 @@ footer .shell { display: flex; flex-wrap: wrap; gap: 14px; justify-content: spac
 
 
 /* The header mark, three times the old icon. */
-.brand-mark { width: 78px; height: 78px; border-radius: 16px; display: block; }
-.topbar .shell { height: 96px; }
+.topbar .shell { height: 104px; }
 @media (max-width: 560px) {
-  .brand-mark { width: 54px; height: 54px; border-radius: 12px; }
-  .topbar .shell { height: 72px; }
+  .brand { font-size: 22px; gap: 10px; }
+  .brand .brand-mark { width: 54px; height: 54px; border-radius: 13px; }
+  .topbar .shell { height: 76px; }
 }
 
 /* The creature lives in the hero, where the documents it swallows have room
