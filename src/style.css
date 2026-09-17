@@ -295,7 +295,19 @@ nav button:hover {
 }
 .history {
   flex: 1;
-  /* A flex child only scrolls once it is allowed to shrink below its content. */
+  display: flex;
+  flex-direction: column;
+  /* A flex child only shrinks below its content once this allows it. */
+  min-height: 0;
+}
+/* This heading sits between two blocks that already breathe; the generous
+   top margin elsewhere only costs room the list needs. */
+.history .nav-label {
+  margin-top: 16px;
+}
+/* The heading and the new conversation button stay put; only the list moves. */
+.history-list {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -304,17 +316,17 @@ nav button:hover {
   margin-right: -6px;
   padding-right: 6px;
 }
-.history::-webkit-scrollbar {
+.history-list::-webkit-scrollbar {
   width: 8px;
 }
-.history::-webkit-scrollbar-thumb {
+.history-list::-webkit-scrollbar-thumb {
   background: #302d2a;
   border-radius: 999px;
 }
-.history::-webkit-scrollbar-thumb:hover {
+.history-list::-webkit-scrollbar-thumb:hover {
   background: #403c38;
 }
-.history::-webkit-scrollbar-track {
+.history-list::-webkit-scrollbar-track {
   background: transparent;
 }
 .history p {

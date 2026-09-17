@@ -432,6 +432,7 @@ export default function App() {
           >
             <Plus size={16} /> {t("New conversation")}
           </button>
+          <div className="history-list">
           {data.conversations.length ? (
             data.conversations.map((c) => (
               <div
@@ -463,6 +464,7 @@ export default function App() {
               {t("start here.")}
             </p>
           )}
+          </div>
         </div>
         <div className="sidebar-bottom">
           <div className="local-status">

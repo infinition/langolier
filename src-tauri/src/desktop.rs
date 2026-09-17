@@ -57,11 +57,15 @@ fn enter_background(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
+const TRAY_ID: &str = "langolier";
 fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
     let slot = app.state::<Tray>();
     let mut slot = slot.0.lock().map_err(|_| "tray")?;
     if !enabled {
+        // Dropping our handle is not enough: the runtime keeps its own, and a
+        // second icon appears next to the first when one is built again.
+        app.remove_tray_by_id(TRAY_ID);
         *slot = None;
         return Ok(());
     }
@@ -90,7 +94,7 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
         .item(&quit)
         .build()
         .map_err(err)?;
-    let mut builder = tauri::tray::TrayIconBuilder::with_id("langolier")
+    let mut builder = tauri::tray::TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         // Left click asks a question, right click opens the menu.
         .show_menu_on_left_click(false)
