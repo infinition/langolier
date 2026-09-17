@@ -58,6 +58,9 @@ fn enter_background(app: &tauri::AppHandle) {
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
 const TRAY_ID: &str = "langolier";
+/// Set when the user asks to leave. Without it, the guard that keeps the app
+/// alive in the menu bar also refuses the Quit that menu offers.
+static QUITTING: AtomicBool = AtomicBool::new(false);
 fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
     let slot = app.state::<Tray>();
@@ -113,6 +116,7 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
             "open" => show_main(app),
             "ask" => toggle_palette(app),
             "quit" => {
+                QUITTING.store(true, Ordering::SeqCst);
                 crate::engine::shutdown();
                 app.exit(0)
             }
@@ -833,8 +837,11 @@ pub fn run() {
         .run(|app, event| match event {
             // Windows and Linux end the app with its last window. In the menu
             // bar there is no window on purpose, so the exit is refused.
+            // Windows and Linux end an app with its last window, which the
+            // menu bar mode has to survive. A Quit asked for is honoured.
             tauri::RunEvent::ExitRequested { api, .. }
-                if crate::db::BACKGROUND.load(Ordering::SeqCst) =>
+                if crate::db::BACKGROUND.load(Ordering::SeqCst)
+                    && !QUITTING.load(Ordering::SeqCst) =>
             {
                 api.prevent_exit()
             }
