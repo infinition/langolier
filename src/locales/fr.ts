@@ -50,6 +50,9 @@ export const FR: Record<string, string> = {
   "Every source becomes a starting point. Your memory grows with you.":
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   Send: "Envoyer",
+  "In the background": "En arrière-plan",
+  "Where Langolier waits when you are not using it":
+    "Là où Langolier attend quand vous ne vous en servez pas",
   "Local API": "API locale",
   "Closing the window leaves Langolier in the menu bar, out of the Dock: the interface is released and about 240 MB with it. Click the icon to ask a question, right click for the menu. The local API keeps answering.":
     "Fermer la fenêtre laisse Langolier dans la barre des menus, hors du Dock : l'interface est libérée, et environ 240 Mo avec elle. Cliquez l'icône pour poser une question, clic droit pour le menu. L'API locale continue de répondre.",
