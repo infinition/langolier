@@ -58,9 +58,16 @@ fn enter_background(app: &tauri::AppHandle) {
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
 const TRAY_ID: &str = "langolier";
-/// Set when the user asks to leave. Without it, the guard that keeps the app
-/// alive in the menu bar also refuses the Quit that menu offers.
-static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Whether an exit must be refused. Windows and Linux end an application with
+/// its last window, which the menu bar mode has to survive; macOS does not,
+/// but the rule is the same everywhere so there is one behaviour to reason
+/// about. `code` is Some when the exit was asked for in code, None when the
+/// runtime decided on its own: only the second is ever refused, so Quit keeps
+/// working. The compiler cannot catch this, and the workflow builds the three
+/// platforms without running any of them, so it is checked here.
+fn refuse_exit(code: Option<i32>, background: bool) -> bool {
+    code.is_none() && background
+}
 fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
     let slot = app.state::<Tray>();
@@ -116,8 +123,8 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
             "open" => show_main(app),
             "ask" => toggle_palette(app),
             "quit" => {
-                QUITTING.store(true, Ordering::SeqCst);
                 crate::engine::shutdown();
+                // Programmatic, so the guard below lets it through.
                 app.exit(0)
             }
             _ => {}
@@ -837,11 +844,12 @@ pub fn run() {
         .run(|app, event| match event {
             // Windows and Linux end the app with its last window. In the menu
             // bar there is no window on purpose, so the exit is refused.
-            // Windows and Linux end an app with its last window, which the
-            // menu bar mode has to survive. A Quit asked for is honoured.
-            tauri::RunEvent::ExitRequested { api, .. }
-                if crate::db::BACKGROUND.load(Ordering::SeqCst)
-                    && !QUITTING.load(Ordering::SeqCst) =>
+            // Windows and Linux end an app with its last window, which the menu
+            // bar mode has to survive. Tauri sets `code` to Some when the exit
+            // was asked for in code, None when the runtime decided: only the
+            // second is refused, so Quit keeps working on every platform.
+            tauri::RunEvent::ExitRequested { code, api, .. }
+                if refuse_exit(code, crate::db::BACKGROUND.load(Ordering::SeqCst)) =>
             {
                 api.prevent_exit()
             }
@@ -924,6 +932,19 @@ const TRAY_TEMPLATE_PNG: &[u8] = include_bytes!("../icons/tray-template@2x.png")
 mod integration_tests {
     use super::*;
     use std::time::Instant;
+    /// The menu bar mode must outlive its window, and Quit must still quit.
+    /// Same expectations on macOS, Windows and Linux.
+    #[test]
+    fn only_the_runtime_is_refused_the_exit() {
+        // The window closed while the app lives in the menu bar: stay.
+        assert!(refuse_exit(None, true));
+        // Quit from the menu, or any programmatic exit: go.
+        assert!(!refuse_exit(Some(0), true));
+        assert!(!refuse_exit(Some(1), true));
+        // With a window on screen, nothing is ever refused.
+        assert!(!refuse_exit(None, false));
+        assert!(!refuse_exit(Some(0), false));
+    }
     #[test]
     fn endpoint_policy_and_reference_bounds() {
         assert!(crate::llm::local_endpoint("http://127.0.0.1:1234/v1").is_ok());
