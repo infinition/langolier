@@ -542,6 +542,53 @@ pub async fn serve_with(args: Args, ready: impl FnOnce(Ready) + Send + 'static) 
         });
     }
 }
+/// The local API the window switches on: loopback only, one shared engine
+/// lock with the window, and the same routes the exported page answers.
+/// Returns once the port is open; the listener lives until `stop` fires.
+pub async fn serve_local(
+    db: Db,
+    data_dir: PathBuf,
+    generation: Arc<Mutex<()>>,
+    port: u16,
+    stop: tokio::sync::oneshot::Receiver<()>,
+) -> Res<u16> {
+    // Loopback only. A local memory has no business on the network.
+    let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .map_err(|e| format!("Cannot listen on 127.0.0.1:{port}: {e}"))?;
+    let bound = listener.local_addr().map_err(err)?.port();
+    let app = Arc::new(App {
+        db,
+        data_dir,
+        swap: RwLock::new(()),
+        generation_shared: generation,
+        lockout: Mutex::new(Lockout::default()),
+        chat_rate: StdMutex::new(HashMap::new()),
+    });
+    tokio::spawn(async move {
+        tokio::pin!(stop);
+        loop {
+            tokio::select! {
+                _ = &mut stop => return,
+                accepted = listener.accept() => match accepted {
+                    Ok((stream, peer)) => {
+                        let app = app.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = handle(stream, app, peer.ip()).await {
+                                eprintln!("Local API: {e}")
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("Local API: {e}");
+                        return;
+                    }
+                },
+            }
+        }
+    });
+    Ok(bound)
+}
 /// Engine state, for the page.
 async fn health(s: &crate::db::Settings) -> Value {
     let mut problems: Vec<String> = vec![];
@@ -680,6 +727,7 @@ struct Request {
     body: Vec<u8>,
     length: u64,
     admin_token: String,
+    bearer: String,
 }
 async fn read_head(reader: &mut BufReader<TcpStream>) -> Res<Request> {
     let mut line = String::new();
@@ -689,6 +737,7 @@ async fn read_head(reader: &mut BufReader<TcpStream>) -> Res<Request> {
     let target = parts.next().unwrap_or("/").to_string();
     let mut length = 0u64;
     let mut admin_token = String::new();
+    let mut bearer = String::new();
     loop {
         let mut h = String::new();
         reader.read_line(&mut h).await.map_err(err)?;
@@ -702,6 +751,14 @@ async fn read_head(reader: &mut BufReader<TcpStream>) -> Res<Request> {
         match k.trim().to_ascii_lowercase().as_str() {
             "content-length" => length = v.trim().parse().unwrap_or(0),
             "x-admin-token" => admin_token = v.trim().to_string(),
+            "authorization" => {
+                bearer = v
+                    .trim()
+                    .strip_prefix("Bearer ")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string()
+            }
             _ => {}
         }
     }
@@ -721,6 +778,7 @@ async fn read_head(reader: &mut BufReader<TcpStream>) -> Res<Request> {
         body: Vec::new(),
         length,
         admin_token,
+        bearer,
     })
 }
 async fn read_body(reader: &mut BufReader<TcpStream>, req: &mut Request) -> Res<()> {
@@ -883,6 +941,24 @@ async fn handle(stream: TcpStream, app: Arc<App>, peer: IpAddr) -> Res<()> {
                 rows
             };
             json_ok(&mut w, Value::Array(rows)).await
+        }
+        // One answer, one JSON object, no stream: what Shortcuts, Siri and
+        // local agents can consume. Same pipeline as the page and the app.
+        ("POST", "/api/ask") => {
+            let s = app.db.settings()?;
+            let expected = s.local_api_token.trim();
+            if expected.is_empty() || req.bearer != expected {
+                return json_err(&mut w, "401 Unauthorized", "Wrong or missing token.").await;
+            }
+            if over_chat_rate(&app, peer) {
+                return json_err(
+                    &mut w,
+                    "429 Too Many Requests",
+                    "Too many questions in a row. Try again in a minute.",
+                )
+                .await;
+            }
+            ask(&mut w, &req, &app, &s).await
         }
         ("POST", "/api/chat") => {
             if over_chat_rate(&app, peer) {
@@ -1063,6 +1139,36 @@ fn bundle_settings(bytes: &[u8]) -> Res<crate::db::Settings> {
 }
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+/// Answers once and returns the pipeline's own payload, so the app, the page
+/// and this endpoint never drift into three slightly different answers.
+async fn ask(w: &mut TcpStream, req: &Request, app: &Arc<App>, s: &crate::db::Settings) -> Res<()> {
+    let body: Value = serde_json::from_slice(&req.body).unwrap_or(json!({}));
+    let question = body["question"].as_str().unwrap_or("").trim().to_string();
+    if question.is_empty() {
+        return json_err(w, "400 Bad Request", "empty question").await;
+    }
+    let profile = assistant::get(&app.db, &s.active_assistant)?;
+    let effective = assistant::effective(s, profile.as_ref())?;
+    let conversation = pipeline::new_conversation(&app.db, Some(&s.active_assistant))?;
+    // The engine is shared with the window: one generation at a time.
+    let _gen = app.generation_shared.lock().await;
+    let answered = pipeline::answer(
+        &app.db,
+        &effective,
+        profile.as_ref(),
+        &conversation,
+        &question,
+        "hybrid",
+        false,
+        Arc::new(AtomicBool::new(false)),
+        &|_, _| {},
+    )
+    .await;
+    match answered {
+        Ok(v) => json_ok(w, v).await,
+        Err(e) => json_err(w, "500 Internal Server Error", &e).await,
+    }
 }
 async fn chat(w: &mut TcpStream, req: &Request, app: &Arc<App>) -> Res<()> {
     let body: Value = serde_json::from_slice(&req.body).unwrap_or(json!({}));
@@ -1248,6 +1354,41 @@ mod tests {
         .await;
         assert!(answer.starts_with("HTTP/1.1 400 Bad Request"), "{answer}");
         assert!(answer.contains("invalid id"))
+    }
+    /// The local API answers nobody without the right bearer token, and never
+    /// at all while no token is set.
+    #[cfg(not(feature = "desktop"))]
+    #[tokio::test]
+    async fn the_local_api_demands_its_token() {
+        let app = app();
+        let body = "{\"question\":\"salut\"}";
+        let ask = |head: &str| {
+            format!(
+                "POST /api/ask HTTP/1.1\r\nHost: x\r\n{head}Content-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+        };
+        // No token configured: the endpoint stays shut even with a guess.
+        let answer = roundtrip(app.clone(), &ask("Authorization: Bearer guess\r\n")).await;
+        assert!(answer.starts_with("HTTP/1.1 401"), "{answer}");
+        let mut s = app.db.settings().unwrap();
+        s.local_api_token = "sesame".into();
+        app.db.set_settings(&s).unwrap();
+        for head in [
+            "",
+            "Authorization: Bearer \r\n",
+            "Authorization: Bearer nope\r\n",
+        ] {
+            let answer = roundtrip(app.clone(), &ask(head)).await;
+            assert!(answer.starts_with("HTTP/1.1 401"), "{head:?} -> {answer}");
+        }
+        // A GET must not carry the question either.
+        let answer = roundtrip(
+            app.clone(),
+            "GET /api/ask?question=salut HTTP/1.1\r\nHost: x\r\n\r\n",
+        )
+        .await;
+        assert!(answer.starts_with("HTTP/1.1 404"), "{answer}")
     }
     /// Administration is off by default: the routes must not even exist.
     #[cfg(not(feature = "desktop"))]

@@ -26,6 +26,9 @@ export interface Settings {
   passages_per_source: number;
   chunk_size: number;
   chunk_overlap: number;
+  local_api: boolean;
+  local_api_port: number;
+  local_api_token: string;
   watch_interval: number;
   active_assistant: string;
   ingestion_paused: boolean;

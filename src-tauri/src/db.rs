@@ -46,6 +46,11 @@ pub struct Settings {
     /// Passage length, in characters, and the overlap between two of them.
     pub chunk_size: usize,
     pub chunk_overlap: usize,
+    /// Local HTTP answers for Shortcuts, Siri and local agents. Loopback only.
+    pub local_api: bool,
+    pub local_api_port: u16,
+    /// Bearer token, generated when the API is first switched on.
+    pub local_api_token: String,
     /// Watch scan interval, in seconds.
     pub watch_interval: u64,
     /// Active assistant profile; empty means bare Langolier.
@@ -94,6 +99,9 @@ impl Default for Settings {
             passages_per_source: 3,
             chunk_size: 1400,
             chunk_overlap: 200,
+            local_api: false,
+            local_api_port: 8787,
+            local_api_token: String::new(),
             watch_interval: 30,
             active_assistant: String::new(),
             ingestion_paused: false,

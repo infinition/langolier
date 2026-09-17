@@ -74,7 +74,11 @@ fn apply_autostart(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
 pub(crate) struct AppState {
     pub(crate) db: Db,
     pub(crate) cancel: Arc<AtomicBool>,
-    pub(crate) generation: tokio::sync::Mutex<()>,
+    /// One generation at a time, whoever asks: the window, the palette, or
+    /// the local API when it is switched on.
+    pub(crate) generation: Arc<tokio::sync::Mutex<()>>,
+    /// Stops the local API listener; present only while it runs.
+    pub(crate) local_api: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 #[tauri::command]
 fn snapshot(state: State<AppState>) -> Res<Value> {
@@ -131,8 +135,77 @@ fn save_settings(app: tauri::AppHandle, state: State<AppState>, settings: Settin
         .shortcut
         .parse::<Shortcut>()
         .map_err(|e| format!("Raccourci invalide : {e}"))?;
+    if !(1024..=65535).contains(&settings.local_api_port) {
+        return Err("The local API port must be between 1024 and 65535.".into());
+    }
     state.db.set_settings(&settings)?;
+    apply_local_api(&state, &settings)?;
     register_shortcut(&app, &settings.shortcut)
+}
+/// Starts or stops the local API to match the settings. Switching it on with
+/// no token yet writes one first, so the endpoint is never left open.
+fn apply_local_api(state: &State<AppState>, s: &Settings) -> Res<()> {
+    let running = state
+        .local_api
+        .lock()
+        .map_err(|_| "Local API state is poisoned.")?
+        .is_some();
+    if !s.local_api {
+        if running {
+            if let Ok(mut slot) = state.local_api.lock() {
+                if let Some(stop) = slot.take() {
+                    let _ = stop.send(());
+                }
+            }
+        }
+        return Ok(());
+    }
+    if running {
+        return Ok(());
+    }
+    if s.local_api_token.trim().is_empty() {
+        return Err("The local API needs a token before it answers.".into());
+    }
+    let (stop, halt) = tokio::sync::oneshot::channel();
+    let db = state.db.clone();
+    let root = state.db.root.clone();
+    let generation = state.generation.clone();
+    let port = s.local_api_port;
+    let started = tauri::async_runtime::block_on(crate::server::serve_local(
+        db, root, generation, port, halt,
+    ))?;
+    if let Ok(mut slot) = state.local_api.lock() {
+        *slot = Some(stop)
+    }
+    println!("Local API: http://127.0.0.1:{started}/api/ask");
+    Ok(())
+}
+/// A fresh token for the local API. The caller saves it with the settings.
+#[tauri::command]
+fn new_local_token() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+/// Asks the local API about itself, so the panel can prove it answers.
+#[tauri::command]
+async fn test_local_api(state: State<'_, AppState>) -> Res<Value> {
+    let s = state.db.settings()?;
+    if !s.local_api {
+        return Err("The local API is switched off.".into());
+    }
+    let url = format!("http://127.0.0.1:{}/api/health", s.local_api_port);
+    let started = std::time::Instant::now();
+    let answer = reqwest::Client::new()
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("No answer from {url}: {e}"))?;
+    let ok = answer.status().is_success();
+    Ok(json!({"ok": ok, "url": url, "ms": started.elapsed().as_millis()}))
 }
 /// Rebinds the global shortcut from the settings.
 fn register_shortcut(app: &tauri::AppHandle, accel: &str) -> Res<()> {
@@ -542,7 +615,8 @@ pub fn run() {
             app.manage(AppState {
                 db: db.clone(),
                 cancel: Arc::new(AtomicBool::new(false)),
-                generation: tokio::sync::Mutex::new(()),
+                generation: Arc::new(tokio::sync::Mutex::new(())),
+                local_api: std::sync::Mutex::new(None),
             });
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(crate::ingest::worker(db.clone(), move || {
@@ -554,6 +628,11 @@ pub fn run() {
             }));
             if let Err(e) = register_shortcut(app.handle(), &s.shortcut) {
                 eprintln!("Palette : {e}");
+            }
+            if s.local_api {
+                if let Err(e) = apply_local_api(&app.state::<AppState>(), &s) {
+                    eprintln!("Local API: {e}");
+                }
             }
             Ok(())
         })
@@ -588,6 +667,8 @@ pub fn run() {
             crate::cmd_assistants::delete_api_key,
             crate::cmd_assistants::use_api_key,
             crate::cmd_assistants::telegram_check,
+            new_local_token,
+            test_local_api,
             crate::cmd_assistants::save_assistant,
             crate::cmd_assistants::delete_assistant,
             export_assistant,

@@ -50,6 +50,35 @@ export const FR: Record<string, string> = {
   "Every source becomes a starting point. Your memory grows with you.":
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   Send: "Envoyer",
+  "Local API": "API locale",
+  "Let Shortcuts, Siri and local apps query your Langolier memory.":
+    "Autorisez Raccourcis, Siri et les applications locales à interroger votre mémoire Langolier.",
+  "Answer local requests": "Répondre aux requêtes locales",
+  "Loopback only, never the network. Answers come from the same engine as the window, one question at a time.":
+    "Boucle locale uniquement, jamais le réseau. Les réponses viennent du même moteur que la fenêtre, une question à la fois.",
+  Port: "Port",
+  "Access token": "Jeton d'accès",
+  "Sent as Authorization: Bearer. Without it the API answers nothing.":
+    "Envoyé dans Authorization: Bearer. Sans lui, l'API ne répond rien.",
+  Hide: "Masquer",
+  Show: "Afficher",
+  "Copy the token": "Copier le jeton",
+  Regenerate: "Régénérer",
+  "Token copied.": "Jeton copié.",
+  "New token. Save, then update your shortcut.":
+    "Nouveau jeton. Enregistrez, puis mettez à jour votre raccourci.",
+  "Copy the address": "Copier l'adresse",
+  "Address copied.": "Adresse copiée.",
+  "Test the API": "Tester l'API",
+  "Testing…": "Test en cours…",
+  "The API answers in {n} ms.": "L'API répond en {n} ms.",
+  "The API answered an error.": "L'API a renvoyé une erreur.",
+  "The local API is switched off.": "L'API locale est désactivée.",
+  "The local API needs a token before it answers.":
+    "L'API locale a besoin d'un jeton avant de répondre.",
+  "The local API port must be between 1024 and 65535.":
+    "Le port de l'API locale doit être compris entre 1024 et 65535.",
+  "Wrong or missing token.": "Jeton absent ou incorrect.",
   "Queue up to date": "File à jour",
   "Raw search thresholds, before the judge: minimum cosine":
     "Seuils de recherche bruts, avant le juge : cosinus minimal",

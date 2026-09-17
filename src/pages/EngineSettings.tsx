@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Command,
   KeyRound,
+  Radio,
+  Copy,
 } from "lucide-react";
 import {
   PROVIDERS,
@@ -31,7 +33,7 @@ import { Button, PageHeading, ShortcutCapture } from "../components/Common";
 import ApiKeyField from "../components/ApiKeyField";
 import ReindexModal from "../components/ReindexModal";
 import type { Doc } from "../types";
-import { api, desktop, number } from "../api";
+import { api, desktop, errorText, number } from "../api";
 export default function EngineSettings({
   settings,
   health,
@@ -57,6 +59,8 @@ export default function EngineSettings({
   const [progress, setProgress] = useState("");
   const [embedModels, setEmbedModels] = useState<EmbedModel[]>([]);
   const [reindexing, setReindexing] = useState(false);
+  const [apiProbe, setApiProbe] = useState("");
+  const [tokenShown, setTokenShown] = useState(false);
   useEffect(() => {
     if (!desktop) return;
     void api<EmbedModel[]>("embed_models")
@@ -681,6 +685,140 @@ export default function EngineSettings({
               )}
             </small>
           </label>
+        </section>
+        <section className="panel form-stack">
+          <div className="panel-heading">
+            <div>
+              <h3>{t("Local API")}</h3>
+              <p>
+                {t(
+                  "Let Shortcuts, Siri and local apps query your Langolier memory.",
+                )}
+              </p>
+            </div>
+            <Radio size={20} />
+          </div>
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={s.local_api}
+              onChange={async (e) => {
+                const on = e.target.checked;
+                setApiProbe("");
+                if (on && !s.local_api_token) {
+                  try {
+                    field("local_api_token", await api<string>("new_local_token"));
+                  } catch (err) {
+                    onError(err);
+                    return;
+                  }
+                }
+                field("local_api", on);
+              }}
+            />
+            {t("Answer local requests")}
+            <small>
+              {t(
+                "Loopback only, never the network. Answers come from the same engine as the window, one question at a time.",
+              )}
+            </small>
+          </label>
+          {s.local_api && (
+            <>
+              <label>
+                {t("Port")}
+                <input
+                  type="number"
+                  min="1024"
+                  max="65535"
+                  value={s.local_api_port}
+                  onChange={(e) =>
+                    field("local_api_port", Number(e.target.value))
+                  }
+                />
+              </label>
+              <label>
+                {t("Access token")}
+                <input
+                  type={tokenShown ? "text" : "password"}
+                  readOnly
+                  value={s.local_api_token}
+                  onFocus={(e) => e.target.select()}
+                />
+                <small>
+                  {t(
+                    "Sent as Authorization: Bearer. Without it the API answers nothing.",
+                  )}
+                </small>
+              </label>
+              <div className="button-row">
+                <Button onClick={() => setTokenShown(!tokenShown)}>
+                  {tokenShown ? t("Hide") : t("Show")}
+                </Button>
+                <Button
+                  onClick={() =>
+                    void navigator.clipboard
+                      .writeText(s.local_api_token)
+                      .then(() => setApiProbe(t("Token copied.")))
+                      .catch(onError)
+                  }
+                >
+                  <Copy size={14} /> {t("Copy the token")}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try {
+                      field("local_api_token", await api<string>("new_local_token"));
+                      setApiProbe(t("New token. Save, then update your shortcut."));
+                    } catch (e) {
+                      onError(e);
+                    }
+                  }}
+                >
+                  <RefreshCw size={14} /> {t("Regenerate")}
+                </Button>
+              </div>
+              <p className="field-help">
+                POST http://127.0.0.1:{s.local_api_port}/api/ask
+                <br />
+                {'{ "question": "…" }'} → {'{ "content": "…", "sources": [ … ] }'}
+              </p>
+              <div className="button-row">
+                <Button
+                  onClick={() =>
+                    void navigator.clipboard
+                      .writeText(
+                        `http://127.0.0.1:${s.local_api_port}/api/ask`,
+                      )
+                      .then(() => setApiProbe(t("Address copied.")))
+                      .catch(onError)
+                  }
+                >
+                  <Copy size={14} /> {t("Copy the address")}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    setApiProbe(t("Testing…"));
+                    try {
+                      const r = await api<{ ok: boolean; ms: number }>(
+                        "test_local_api",
+                      );
+                      setApiProbe(
+                        r.ok
+                          ? t("The API answers in {n} ms.", { n: r.ms })
+                          : t("The API answered an error."),
+                      );
+                    } catch (e) {
+                      setApiProbe(errorText(e));
+                    }
+                  }}
+                >
+                  {t("Test the API")}
+                </Button>
+              </div>
+              {apiProbe && <p className="field-help">{apiProbe}</p>}
+            </>
+          )}
         </section>
       </div>
       <section className="panel">
