@@ -51,6 +51,12 @@ export const FR: Record<string, string> = {
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   Send: "Envoyer",
   "In the background": "En arrière-plan",
+  Processing: "Traitement",
+  "How sources become passages and vectors":
+    "Comment les sources deviennent des passages et des vecteurs",
+  "Scan every": "Scruter toutes les",
+  "Applies to every watch that does not set its own interval.":
+    "S'applique à chaque vigie qui ne fixe pas son propre intervalle.",
   "Where Langolier waits when you are not using it":
     "Là où Langolier attend quand vous ne vous en servez pas",
   "Local API": "API locale",

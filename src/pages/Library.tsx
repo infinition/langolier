@@ -1,12 +1,12 @@
 /// The sources page: the library, its filters, and the bulk actions on it.
 import { useEffect, useState } from "react";
-import { api, bytes, docError, number } from "../api";
+import { api, bytes, docError, number, patchSettings } from "../api";
 import { Button, Empty, PageHeading } from "../components/Common";
 import { confirm } from "../components/SourceEditor";
 import LibraryTree from "../components/LibraryTree";
 import MemorySearch from "../components/MemorySearch";
 import { t } from "../i18n";
-import type { Doc, Source } from "../types";
+import type { Doc, Settings, Source } from "../types";
 import {
   CircleAlert,
   CircleCheck,
@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   Trash2,
   Video,
+  Pause,
+  Play,
 } from "lucide-react";
 
 const kindIcon = (kind: string) =>
@@ -45,6 +47,7 @@ const kindIcon = (kind: string) =>
 export default function LibraryPage({
   docs,
   dataDir,
+  settings,
   onImport,
   onOpenDoc,
   onOpenPassage,
@@ -55,6 +58,7 @@ export default function LibraryPage({
 }: {
   docs: Doc[];
   dataDir: string;
+  settings: Settings;
   onImport: () => void;
   onOpenDoc: (doc: Doc) => void;
   onOpenPassage: (source: Source, highlight: string) => void;
@@ -459,6 +463,102 @@ export default function LibraryPage({
             )}
           </div>
         )}
+        <section className="panel form-stack ingestion-settings">
+          <div className="panel-heading">
+            <div>
+              <h3>{t("Processing")}</h3>
+              <p>{t("How sources become passages and vectors")}</p>
+            </div>
+            <Button
+              onClick={() =>
+                void patchSettings(settings, {
+                  ingestion_paused: !settings.ingestion_paused,
+                })
+                  .then(onRefresh)
+                  .catch(onError)
+              }
+            >
+              {settings.ingestion_paused ? (
+                <Play size={15} />
+              ) : (
+                <Pause size={15} />
+              )}{" "}
+              {settings.ingestion_paused
+                ? t("Resume processing")
+                : t("Pause processing")}
+            </Button>
+          </div>
+          {settings.ingestion_paused && (
+            <div className="setting-note">
+              <Pause size={16} />
+              <p>
+                {t(
+                  "Processing paused: watches keep spotting files and the queue grows, but nothing is ingested. Nothing is lost, everything resumes on restart.",
+                )}
+              </p>
+            </div>
+          )}
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={settings.ingest_in_background}
+              onChange={(e) =>
+                void patchSettings(settings, {
+                  ingest_in_background: e.target.checked,
+                })
+                  .then(onRefresh)
+                  .catch(onError)
+              }
+            />
+            {t("Keep processing sources in the menu bar")}
+            <small>
+              {t(
+                "Off: queued sources wait. OCR, transcription and vectors are what heat the machine.",
+              )}
+            </small>
+          </label>
+          <label>
+            {t("Passage length: {n} characters", { n: settings.chunk_size })}
+            <input
+              type="range"
+              min="400"
+              max="4000"
+              step="100"
+              value={settings.chunk_size}
+              onChange={(e) =>
+                void patchSettings(settings, {
+                  chunk_size: Number(e.target.value),
+                })
+                  .then(onRefresh)
+                  .catch(onError)
+              }
+            />
+            <small>
+              {t(
+                "Applies to sources indexed from now on. Existing passages keep the length they were cut with, until a reindex.",
+              )}
+            </small>
+          </label>
+          <label>
+            {t("Overlap between passages: {n} characters", {
+              n: settings.chunk_overlap,
+            })}
+            <input
+              type="range"
+              min="0"
+              max="800"
+              step="50"
+              value={settings.chunk_overlap}
+              onChange={(e) =>
+                void patchSettings(settings, {
+                  chunk_overlap: Number(e.target.value),
+                })
+                  .then(onRefresh)
+                  .catch(onError)
+              }
+            />
+          </label>
+        </section>
         <div className="info-note">
           <ShieldCheck size={15} />
           <p>

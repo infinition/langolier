@@ -18,10 +18,10 @@ import {
   CircleCheck,
   Copy,
 } from "lucide-react";
-import type { Doc, Watch } from "../types";
+import type { Doc, Settings, Watch } from "../types";
 import { Button, PageHeading, Empty, Modal } from "../components/Common";
 import { confirm } from "../components/SourceEditor";
-import { api, desktop, docError, number } from "../api";
+import { api, desktop, docError, number, patchSettings } from "../api";
 
 // Offered intervals, in seconds.
 export const INTERVALS: [number, string][] = [
@@ -64,18 +64,18 @@ const ago = (at: number | null) => {
 export default function Watches({
   watches,
   docs,
-  interval,
-  paused,
+  settings,
   onError,
   onChanged,
 }: {
   watches: Watch[];
   docs: Doc[];
-  interval: number;
-  paused: boolean;
+  settings: Settings;
   onError: (e: unknown) => void;
   onChanged: () => Promise<void>;
 }) {
+  // The page shows and owns the interval every watch falls back to.
+  const interval = settings.watch_interval;
   const [detail, setDetail] = useState<Watch | null>(null);
   const [path, setPath] = useState("");
   const [mode, setMode] = useState<"sync" | "hoover">("sync");
@@ -190,33 +190,52 @@ export default function Watches({
         description={t(
           "Folders watched continuously, local or on a mounted NAS. Whatever lands there enters your memory on its own.",
         )}
-        action={
-          <Button
-            primary={paused}
-            onClick={() =>
-              void api("set_ingestion_paused", { paused: !paused })
+      />
+      <section className="panel form-stack watch-settings">
+        <label>
+          {t("Scan every")}
+          <select
+            value={settings.watch_interval}
+            onChange={(e) =>
+              void patchSettings(settings, {
+                watch_interval: Number(e.target.value),
+              })
                 .then(onChanged)
                 .catch(onError)
             }
-            title={t(
-              "Pause processing of queued files without losing anything",
-            )}
           >
-            {paused ? <Play size={15} /> : <Pause size={15} />}{" "}
-            {paused ? t("Resume processing") : t("Pause processing")}
-          </Button>
-        }
-      />
-      {paused && (
-        <div className="setting-note">
-          <Pause size={16} />
-          <p>
+            {INTERVALS.filter(([v]) => v > 0).map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <small>
             {t(
-              "Processing paused: watches keep spotting files and the queue grows, but nothing is ingested. Nothing is lost, everything resumes on restart.",
+              "Applies to every watch that does not set its own interval.",
             )}
-          </p>
-        </div>
-      )}
+          </small>
+        </label>
+        <label className="check inline-check">
+          <input
+            type="checkbox"
+            checked={settings.watch_in_background}
+            onChange={(e) =>
+              void patchSettings(settings, {
+                watch_in_background: e.target.checked,
+              })
+                .then(onChanged)
+                .catch(onError)
+            }
+          />
+          {t("Keep watching folders in the menu bar")}
+          <small>
+            {t(
+              "Off: a watched folder filled while Langolier sits in the menu bar is only picked up when you open the window again.",
+            )}
+          </small>
+        </label>
+      </section>
       <section className="panel watch-form">
         <div className="watch-form-row">
           <div className="searchbox grow">

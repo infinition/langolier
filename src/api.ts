@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getLang, t } from "./i18n";
-import { ABSTAIN_TEXT, type Snapshot } from "./types";
+import { ABSTAIN_TEXT, type Settings, type Snapshot } from "./types";
 export const desktop = isTauri();
 export const initial: Snapshot = {
   settings: {
@@ -81,6 +81,14 @@ export const docError = (e: string) =>
   e.startsWith(DUPLICATE)
     ? t("Duplicate of {name}", { name: e.slice(DUPLICATE.length) })
     : t(e);
+/// Changes a few settings without holding the whole form: a page that owns
+/// one switch should not have to know about every other field.
+export async function patchSettings(
+  current: Settings,
+  changes: Partial<Settings>,
+): Promise<void> {
+  await api("save_settings", { settings: { ...current, ...changes } });
+}
 export const locale = () => (getLang() === "fr" ? "fr-FR" : "en-US");
 export const number = (n: number) =>
   new Intl.NumberFormat(locale()).format(n);

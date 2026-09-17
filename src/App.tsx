@@ -898,6 +898,7 @@ export default function App() {
           <LibraryPage
             docs={docs}
             dataDir={data.data_dir}
+            settings={data.settings}
             onImport={() => setImportTab("files")}
             onOpenDoc={(d) => void viewDoc(d)}
             onOpenPassage={openFromSearch}
@@ -911,8 +912,7 @@ export default function App() {
           <Watches
             watches={data.watches}
             docs={docs}
-            interval={data.settings.watch_interval}
-            paused={data.settings.ingestion_paused}
+            settings={data.settings}
             onError={reportError}
             onChanged={refresh}
           />

@@ -1127,6 +1127,14 @@ nav button:hover {
 .panel {
   min-width: 0;
 }
+/* Settings that belong to a page sit above its content, not in a sidebar. */
+.watch-settings,
+.ingestion-settings {
+  margin-bottom: 21px;
+}
+.ingestion-settings .panel-heading {
+  margin-bottom: 14px;
+}
 .lime {
   color: var(--lime) !important;
 }
