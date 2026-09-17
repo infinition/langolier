@@ -517,6 +517,25 @@ export default function LibraryPage({
               )}
             </small>
           </label>
+          <label className="check inline-check">
+            <input
+              type="checkbox"
+              checked={settings.auto_subtitles}
+              onChange={(e) =>
+                void patchSettings(settings, {
+                  auto_subtitles: e.target.checked,
+                })
+                  .then(onRefresh)
+                  .catch(onError)
+              }
+            />
+            {t("Accept machine-made subtitles for videos")}
+            <small>
+              {t(
+                "A video whose author wrote subtitles is read in seconds instead of being transcribed. Machine-made ones are faster too, but carry no punctuation, which cuts poorly into passages.",
+              )}
+            </small>
+          </label>
           <label>
             {t("Passage length: {n} characters", { n: settings.chunk_size })}
             <input

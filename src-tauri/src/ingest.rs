@@ -86,6 +86,77 @@ pub async fn command(name: &str, args: &[String], timeout: u64) -> Res<String> {
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
+/// Runs a command again when it fails. yt-dlp trips on rate limits and flaky
+/// networks, and those clear on their own; a permanent error simply costs the
+/// extra waits before surfacing.
+async fn command_retry(name: &str, args: &[String], timeout: u64, tries: u32) -> Res<String> {
+    let mut last = String::new();
+    for attempt in 1..=tries.max(1) {
+        match command(name, args, timeout).await {
+            Ok(out) => return Ok(out),
+            Err(e) => {
+                last = e;
+                if attempt < tries {
+                    // A 429 from a platform clears in tens of seconds, not in
+                    // three: ten, then forty.
+                    let wait = 10u64 * 4u64.pow(attempt - 1);
+                    eprintln!("{name} failed, retrying in {wait}s: {last}");
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                }
+            }
+        }
+    }
+    Err(last)
+}
+/// Subtitles the platform already holds, when there are any. An hour of video
+/// becomes text in seconds instead of a download plus a transcription, and an
+/// author's own subtitles are punctuated, which a small whisper model is not.
+/// Returns the subtitle file and the title.
+async fn fetch_subtitles(db: &Db, id: &str, url: &str, auto: bool) -> Option<(PathBuf, String)> {
+    let dir = db.root.join("media");
+    let template = dir.join(format!("{id}.%(ext)s"));
+    let mut args: Vec<String> = vec![
+        "--ignore-config".into(),
+        "--no-playlist".into(),
+        "--no-progress".into(),
+        "--skip-download".into(),
+        "--write-subs".into(),
+        // Exact codes: `fr.*` matches sixty variants and yt-dlp tries them all.
+        "--sub-langs".into(),
+        "fr,en".into(),
+        // Its own retries handle a throttled request without losing the run.
+        "--retries".into(),
+        "5".into(),
+        "--retry-sleep".into(),
+        "exp=2:60".into(),
+        "--convert-subs".into(),
+        "vtt".into(),
+        "--print".into(),
+        "title".into(),
+        "-o".into(),
+        template.display().to_string(),
+    ];
+    if auto {
+        args.push("--write-auto-subs".into());
+    }
+    args.push("--".into());
+    args.push(url.into());
+    let title = command_retry("yt-dlp", &args, 300, 3).await.ok()?;
+    // yt-dlp names them `<id>.<lang>.vtt`; take the first one it wrote.
+    let found = std::fs::read_dir(&dir)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            p.extension().is_some_and(|x| x == "vtt")
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(id))
+        })?;
+    Some((
+        found,
+        title.lines().next().unwrap_or_default().trim().into(),
+    ))
+}
 pub fn queue(db: &Db, paths: Vec<String>) -> Res<Value> {
     let mut added = 0;
     let mut skipped = vec![];
@@ -507,7 +578,29 @@ async fn pdf_sections(db: &Db, id: &str, path: &Path) -> Res<Vec<Section>> {
 pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &str) -> Res<()> {
     let s = db.settings()?;
     let mut name = name.to_string();
-    let path = if kind == "url" {
+    // Subtitles the platform already holds spare the download and the
+    // transcription. The file then becomes the source, and is deduplicated
+    // and hashed like any other.
+    let mut subtitled = None;
+    if kind == "url" {
+        db.stage(id, "Looking for subtitles · yt-dlp")?;
+        if let Some((file, title)) = fetch_subtitles(db, id, source, s.auto_subtitles).await {
+            if !title.is_empty() {
+                let short: String = title.chars().take(180).collect();
+                db.conn()?
+                    .execute(
+                        "UPDATE documents SET name=?2 WHERE id=?1 AND name=source",
+                        params![id, short],
+                    )
+                    .map_err(err)?;
+                name = short;
+            }
+            subtitled = Some(file);
+        }
+    }
+    let path = if let Some(file) = &subtitled {
+        file.clone()
+    } else if kind == "url" {
         db.stage(id, "Downloading media · yt-dlp")?;
         let template = db.root.join("media").join(format!("{id}.%(ext)s"));
         let result = command(
@@ -581,7 +674,23 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
         )
         .map_err(err)?;
     }
-    let (sections, language) = if kind == "url" || media(kind) {
+    let (sections, language) = if subtitled.is_some() {
+        let text = std::fs::read_to_string(&path).map_err(err)?;
+        let secs = merge_segments(subtitles(&text));
+        if secs.is_empty() {
+            return Err("The subtitles held no usable text.".into());
+        }
+        let sample = secs
+            .iter()
+            .map(|x| x.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(10000)
+            .collect::<String>();
+        let language = whatlang::detect(&sample).map(|v| v.lang().code().to_string());
+        (secs, language)
+    } else if kind == "url" || media(kind) {
         transcribe(db, id, &path, &s).await?
     } else {
         if path.metadata().map_err(err)?.len() > 256 * 1024 * 1024 {
@@ -763,6 +872,30 @@ pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {
 }
 #[cfg(test)]
 mod tests {
+    /// A platform's subtitle file has to become passages with their timestamps,
+    /// whatever header and blank lines it carries.
+    #[test]
+    fn subtitle_file_becomes_timed_passages() {
+        let vtt = "WEBVTT\nKind: captions\nLanguage: fr\n\n\
+                   00:00:01.000 --> 00:00:04.000\n\
+                   Premiere phrase du document.\n\n\
+                   00:00:04.500 --> 00:00:08.200\n\
+                   Deuxieme phrase, juste apres.\n\n\
+                   00:00:09.000 --> 00:00:12.000\n\
+                   Et la troisieme pour finir.\n";
+        let parsed = super::subtitles(vtt);
+        assert_eq!(parsed.len(), 3, "one section per cue");
+        assert!(parsed[0].text.contains("Premiere phrase"));
+        assert!(parsed[0].locator.contains("00:00:01"));
+        // Merging keeps the text and spans from the first start to the last end.
+        let merged = super::merge_segments(parsed);
+        assert!(!merged.is_empty());
+        let all = merged.iter().map(|s| s.text.as_str()).collect::<String>();
+        for expected in ["Premiere", "Deuxieme", "troisieme"] {
+            assert!(all.contains(expected), "{expected} lost while merging");
+        }
+        assert!(super::subtitles("WEBVTT\n\n").is_empty());
+    }
     use super::*;
     #[test]
     fn notebook_does_not_execute_or_ingest_output() {

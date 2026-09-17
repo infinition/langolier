@@ -64,6 +64,13 @@ export const FR: Record<string, string> = {
     "Un serveur Ollama, ou tout ce qui parle la même API. Il doit tourner quand Langolier cherche.",
   "In the background": "En arrière-plan",
   Processing: "Traitement",
+  "Accept machine-made subtitles for videos":
+    "Accepter les sous-titres générés automatiquement",
+  "A video whose author wrote subtitles is read in seconds instead of being transcribed. Machine-made ones are faster too, but carry no punctuation, which cuts poorly into passages.":
+    "Une vidéo dont l'auteur a écrit les sous-titres est lue en quelques secondes au lieu d'être transcrite. Les sous-titres automatiques sont rapides aussi, mais sans ponctuation, ce qui se découpe mal en passages.",
+  "Looking for subtitles · yt-dlp": "Recherche de sous-titres · yt-dlp",
+  "The subtitles held no usable text.":
+    "Les sous-titres ne contenaient aucun texte exploitable.",
   "How sources become passages and vectors":
     "Comment les sources deviennent des passages et des vecteurs",
   "Scan every": "Scruter toutes les",
