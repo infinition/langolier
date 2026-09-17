@@ -50,6 +50,9 @@ export const FR: Record<string, string> = {
   "Every source becomes a starting point. Your memory grows with you.":
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   Send: "Envoyer",
+  "The website": "Le site",
+  "The source code": "Le code source",
+  "Support the project": "Soutenir le projet",
   "In the background": "En arrière-plan",
   Processing: "Traitement",
   "How sources become passages and vectors":

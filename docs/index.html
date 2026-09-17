@@ -183,6 +183,331 @@ footer .shell { display: flex; flex-wrap: wrap; gap: 14px; justify-content: spac
 .support { display: inline-flex; align-items: center; gap: 7px; color: var(--lime); }
 
 /* Both languages ship in the page; the root attribute decides which shows. */
+/* ===================================================================
+   The Langolier, alive. Lifted from the standalone animation so the
+   page, the application and the creature stay the same object.
+   The host decides the size; the component fills it.
+   =================================================================== */
+.langolier {
+  --pointer-x: 0;
+  --pointer-y: 0;
+  --idle-x: 0px;
+  --idle-y: 0px;
+  --idle-r: 0deg;
+  --breath: 0;
+  --pulse: 0;
+  --hover: 0;
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1351 / 1164;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.langolier:focus-visible {
+  filter: drop-shadow(0 0 0.8rem rgba(105, 160, 255, .75));
+}
+
+.langolier__body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 64%;
+  transform:
+    translate3d(
+      calc(var(--idle-x) + var(--pointer-x) * 7px),
+      calc(var(--idle-y) + var(--pointer-y) * 5px - var(--breath) * 8px),
+      0
+    )
+    rotateX(calc(var(--pointer-y) * -2.1deg))
+    rotateY(calc(var(--pointer-x) * 2.8deg))
+    rotateZ(calc(var(--idle-r) + var(--pointer-x) * 0.9deg))
+    scaleX(calc(1 + var(--breath) * 0.008 + var(--hover) * 0.012))
+    scaleY(calc(1 + var(--breath) * 0.016 + var(--hover) * 0.012));
+  transition: transform 90ms linear;
+  will-change: transform;
+}
+
+.langolier__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: 50% 64%;
+  filter:
+    drop-shadow(0 24px 34px rgba(0, 0, 0, .38))
+    brightness(calc(1 + var(--pulse) * .018));
+  transition: filter 160ms ease;
+}
+
+/* Ombre "au sol" qui respire légèrement en opposition au personnage. */
+.langolier__shadow {
+  position: absolute;
+  z-index: -1;
+  left: 22%;
+  right: 18%;
+  bottom: -2%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .48);
+  filter: blur(22px);
+  opacity: calc(.62 - var(--breath) * .09);
+  transform:
+    translate3d(calc(var(--pointer-x) * -4px), 0, -20px)
+    scaleX(calc(1 - var(--breath) * .035))
+    scaleY(calc(.86 - var(--breath) * .025));
+  will-change: transform, opacity;
+}
+
+/* Le glow ne couvre que les zones des yeux.
+   Il suit très légèrement le pointeur, ce qui donne une impression de regard. */
+.eye-glow {
+  position: absolute;
+  width: 10%;
+  aspect-ratio: 1.1;
+  border-radius: 50%;
+  opacity: calc(.10 + var(--pulse) * .15 + var(--hover) * .08);
+  background:
+    radial-gradient(
+      ellipse at 50% 50%,
+      rgba(118, 193, 255, .40) 0%,
+      rgba(48, 120, 255, .12) 38%,
+      transparent 70%
+    );
+  filter: blur(9px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transform:
+    translate3d(
+      calc(var(--pointer-x) * 2.5px),
+      calc(var(--pointer-y) * 2px),
+      8px
+    )
+    scale(calc(1 + var(--pulse) * .05));
+}
+
+.eye-glow--left {
+  left: 26.0%;
+  top: 7.8%;
+}
+
+.eye-glow--right {
+  left: 63.5%;
+  top: 15.6%;
+}
+
+/* Profondeur de bouche : sombre, neutre, sans vortex ni effet bleu.
+   Le gradient varie subtilement avec la respiration. */
+.mouth-depth {
+  position: absolute;
+  z-index: -0;
+  left: 25.2%;
+  top: 27.4%;
+  width: 50.8%;
+  height: 48.5%;
+  border-radius: 47% 48% 50% 50%;
+  pointer-events: none;
+  opacity: calc(.10 + var(--breath) * .025);
+  background:
+    radial-gradient(
+      ellipse at 50% 44%,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, .16) 58%,
+      rgba(0, 0, 0, .36) 100%
+    );
+}
+
+
+
+/* =========================================================
+   DOCUMENT INGESTION
+   Inspiré du prototype joint : les documents apparaissent
+   autour de la mascotte, suivent une trajectoire courbe,
+   rétrécissent puis se fragmentent en "knowledge bits".
+   Aucun tourbillon permanent n'est ajouté dans la bouche.
+   ========================================================= */
+
+.knowledge-layer {
+  position: absolute;
+  inset: -16%;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+  transform: translateZ(70px);
+}
+
+.flying-doc {
+  position: absolute;
+  /* Proportional to the creature, whatever size the host gives it. */
+  width: 7.2%;
+  min-width: 7px;
+  aspect-ratio: .76;
+  border-radius: 4px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.98), rgba(215,239,255,.96));
+  border: 1px solid rgba(135, 211, 255, .68);
+  box-shadow:
+    0 0 10px rgba(84, 190, 255, .80),
+    0 0 28px rgba(25, 104, 255, .32),
+    0 4px 14px rgba(0, 0, 0, .22);
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  backface-visibility: hidden;
+}
+
+.flying-doc::before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  right: 14%;
+  top: 22%;
+  height: 6%;
+  border-radius: 999px;
+  background: rgba(73, 118, 150, .70);
+  box-shadow:
+    0 8px 0 rgba(73, 118, 150, .62),
+    0 16px 0 rgba(73, 118, 150, .58),
+    0 24px 0 rgba(73, 118, 150, .50);
+}
+
+.flying-doc::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 32%;
+  aspect-ratio: 1;
+  background:
+    linear-gradient(225deg,
+      rgba(166,218,255,.78) 0 48%,
+      rgba(255,255,255,.98) 49% 100%);
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+  opacity: .88;
+}
+
+.knowledge-bit {
+  position: absolute;
+  width: 0.9%;
+  min-width: 2px;
+  aspect-ratio: 1;
+  border-radius: 1px;
+  background: #66d3ff;
+  box-shadow:
+    0 0 7px rgba(101, 211, 255, .95),
+    0 0 16px rgba(44, 116, 255, .80);
+  will-change: transform, opacity;
+}
+
+.mouth-ingest-flash {
+  position: absolute;
+  left: 50.6%;
+  top: 51.5%;
+  width: 11%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(.15);
+  opacity: 0;
+  background:
+    radial-gradient(circle,
+      rgba(235,249,255,.90) 0 7%,
+      rgba(88,190,255,.42) 18%,
+      rgba(27,93,255,.16) 38%,
+      transparent 70%);
+  filter: blur(3px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.langolier.is-feeding .mouth-ingest-flash {
+  animation: ingest-flash 720ms ease-out;
+}
+
+@keyframes ingest-flash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.12); }
+  28%  { opacity: .62; transform: translate(-50%, -50%) scale(1); }
+  56%  { opacity: .28; transform: translate(-50%, -50%) scale(.72); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.18); }
+}
+
+/* Petit "chomp" tactile au clic. */
+.langolier.is-reacting .langolier__body {
+  animation: chomp 620ms cubic-bezier(.19, .8, .25, 1);
+}
+
+.langolier.is-reacting .eye-glow {
+  animation: eye-pop 620ms ease-out;
+}
+
+@keyframes chomp {
+  0%   { transform: translate3d(0,0,0) scale(1) rotate(0); }
+  16%  { transform: translate3d(0,7px,18px) scaleX(1.055) scaleY(.93) rotate(-1deg); }
+  34%  { transform: translate3d(0,-15px,44px) scaleX(.975) scaleY(1.075) rotate(1.2deg); }
+  56%  { transform: translate3d(0,5px,20px) scaleX(1.02) scaleY(.975) rotate(-.45deg); }
+  100% { transform: translate3d(0,0,0) scale(1) rotate(0); }
+}
+
+@keyframes eye-pop {
+  0%, 100% { opacity: .18; transform: scale(1); }
+  34%      { opacity: .55; transform: scale(1.16); }
+}
+
+/* Réduction propre des animations pour l'accessibilité. */
+@media (prefers-reduced-motion: reduce) {
+  .langolier__body,
+  .langolier__shadow,
+  .eye-glow,
+  .langolier__image,
+  .knowledge-layer,
+  .mouth-ingest-flash {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+
+/* The header mark, three times the old icon. */
+.brand-mark { width: 78px; height: 78px; border-radius: 16px; display: block; }
+.topbar .shell { height: 96px; }
+@media (max-width: 560px) {
+  .brand-mark { width: 54px; height: 54px; border-radius: 12px; }
+  .topbar .shell { height: 72px; }
+}
+
+/* The creature lives in the hero, where the documents it swallows have room
+   to be seen. It reacts to the pointer and eats on hover or click. */
+.creature-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 6px;
+}
+.creature-slot .langolier {
+  width: min(64vw, 300px);
+  aspect-ratio: 1351 / 1164;
+}
+.creature-hint {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: .02em;
+}
+@media (min-width: 900px) {
+  /* Side by side with the pitch, rather than pushed under it. */
+  .hero .shell { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center; }
+  .hero .eyebrow, .hero h1, .hero .lead, .hero .cta { grid-column: 1; }
+  .creature-slot { grid-column: 2; grid-row: 1 / span 4; margin: 0; }
+  .creature-slot .langolier { width: 340px; }
+}
+
 [data-lang] { display: none; }
 html[lang="en"] [data-lang="en"], html[lang="fr"] [data-lang="fr"] { display: revert; }
 /* A component rule that sets its own display outranks the two above, so it
@@ -197,7 +522,7 @@ html[lang="fr"] .card .tag[data-lang="fr"] { display: inline-block; }
 <header class="topbar">
   <div class="shell">
     <a class="brand" href="#top">
-      <img src="langolier.png" alt="">
+      <img class="brand-mark" src="langolier.png" alt="">
       <span>langolier<span class="dot">.</span></span>
     </a>
     <nav class="tabs">
@@ -233,6 +558,23 @@ html[lang="fr"] .card .tag[data-lang="fr"] { display: inline-block; }
       des notes vocales, posez vos questions, obtenez des réponses avec leurs citations.
       Rien ne quitte la machine, sauf si vous le branchez sur une API distante.
     </p>
+    <div class="creature-slot">
+      <span class="langolier" id="langolier" role="img"
+            aria-label="Langolier" tabindex="0">
+        <span class="langolier__shadow" aria-hidden="true"></span>
+        <span class="langolier__body">
+          <img class="langolier__image" src="langolier-alive.png" alt="" draggable="false">
+          <span class="eye-glow eye-glow--left" aria-hidden="true"></span>
+          <span class="eye-glow eye-glow--right" aria-hidden="true"></span>
+          <span class="mouth-depth" aria-hidden="true"></span>
+        </span>
+        <span class="knowledge-layer" id="knowledgeLayer" aria-hidden="true">
+          <span class="mouth-ingest-flash"></span>
+        </span>
+      </span>
+      <span class="creature-hint" data-lang="en">Hover, or click to feed it</span>
+      <span class="creature-hint" data-lang="fr">Survolez, ou cliquez pour le nourrir</span>
+    </div>
     <div class="cta">
       <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="en">Download</a>
       <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="fr">Télécharger</a>
@@ -571,5 +913,16 @@ Authorization: Bearer &lt;token&gt;
 })();
 </script>
 
+<script src="langolier-alive.js"></script>
+<script>
+(function () {
+  var el = document.getElementById("langolier");
+  var alive = window.mountLangolier && window.mountLangolier(el);
+  if (!alive) return;
+  // Hover or click, and it swallows a few documents.
+  el.addEventListener("pointerenter", function () { alive.feed(7); });
+  el.addEventListener("click", function (e) { e.preventDefault(); alive.feed(12); });
+})();
+</script>
 </body>
 </html>

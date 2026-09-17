@@ -1,17 +1,52 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { mountLangolier } from "../langolier-alive";
 import { t } from "../i18n";
 import { api, desktop } from "../api";
 import { captureShortcut, formatShortcut } from "../shortcut";
 import { Library, X, FileText, ArrowUpRight, Copy, Check } from "lucide-react";
 import type { Source } from "../types";
-export function Logo({ small = false }: { small?: boolean }) {
+/// The creature, alive in the sidebar. It breathes on its own; `busy` makes it
+/// swallow documents, which is what ingestion looks like from the outside.
+export function Logo({
+  small = false,
+  busy = false,
+}: {
+  small?: boolean;
+  busy?: boolean;
+}) {
+  const host = useRef<HTMLSpanElement>(null);
+  const alive = useRef<ReturnType<typeof mountLangolier>>(null);
+  useEffect(() => {
+    alive.current = mountLangolier(host.current);
+    const creature = alive.current;
+    return () => creature?.destroy();
+  }, []);
+  useEffect(() => {
+    alive.current?.setFeeding(busy);
+  }, [busy]);
   return (
-    <img
-      className={`logo-symbol ${small ? "small" : ""}`}
-      src="/icon.png"
-      alt=""
-      draggable={false}
-    />
+    <span
+      ref={host}
+      className={`logo-symbol logo-alive ${small ? "small" : ""}`}
+      onClick={() => alive.current?.feed(9)}
+      role="img"
+      aria-label="Langolier"
+    >
+      <span className="langolier__body">
+        <img
+          className="langolier__image"
+          src="/langolier-alive.png"
+          alt=""
+          draggable={false}
+        />
+        <span className="eye-glow eye-glow--left" aria-hidden="true" />
+        <span className="eye-glow eye-glow--right" aria-hidden="true" />
+        <span className="mouth-depth" aria-hidden="true" />
+      </span>
+      <span className="knowledge-layer" aria-hidden="true">
+        <span className="mouth-ingest-flash" />
+      </span>
+    </span>
   );
 }
 export function Button({

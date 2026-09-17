@@ -42,6 +42,9 @@ import {
   Eye,
   Bot,
   Square,
+  Globe,
+  Github,
+  Coffee,
   ShieldCheck,
   Cpu,
   HardDrive,
@@ -374,6 +377,10 @@ export default function App() {
     }
   }
   const docs = data.documents;
+  // Something is being read, transcribed or vectorised: the creature eats.
+  const ingesting = docs.some((d) =>
+    ["queued", "processing"].includes(d.status),
+  );
   const ready = docs.filter((d) => d.status === "ready").length;
   const chunks = docs.reduce((a, d) => a + d.chunks, 0);
   const activeNav = navigation.find((n) => n.id === page)!;
@@ -381,7 +388,7 @@ export default function App() {
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => setPage("chat")}>
-          <Logo />
+          <Logo busy={ingesting} />
           <span>
             langolier<span className="brand-dot">.</span>
           </span>
@@ -485,6 +492,36 @@ export default function App() {
             </div>
             <ChevronRight size={14} />
           </button>
+          <div className="sidebar-links">
+            <a
+              href="https://infinition.github.io/langolier/"
+              target="_blank"
+              rel="noreferrer"
+              title={t("The website")}
+              aria-label={t("The website")}
+            >
+              <Globe size={15} />
+            </a>
+            <a
+              href="https://github.com/infinition/langolier"
+              target="_blank"
+              rel="noreferrer"
+              title={t("The source code")}
+              aria-label={t("The source code")}
+            >
+              <Github size={15} />
+            </a>
+            <a
+              className="support"
+              href="https://www.buymeacoffee.com/infinition"
+              target="_blank"
+              rel="noreferrer"
+              title={t("Support the project")}
+              aria-label={t("Support the project")}
+            >
+              <Coffee size={15} />
+            </a>
+          </div>
         </div>
       </aside>
       <div className="main-shell">
