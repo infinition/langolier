@@ -6,6 +6,7 @@
 
 **A local knowledge studio. Feed it documents, code, videos and voice notes, ask questions, get answers with citations. Nothing leaves the machine unless you point it at a cloud API.**
 
+
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-orange.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/infinition/langolier?include_prereleases)](https://github.com/infinition/langolier/releases)
 [![Rust](https://img.shields.io/badge/Rust-Tauri%202-CE422B.svg)](https://v2.tauri.app/)
