@@ -63,6 +63,12 @@ jobs:
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Rust tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      # The HTTP surface is tested here: its routing reaches the palette window,
+      # so with the desktop feature the test binary links the Windows GUI stack,
+      # which fails to load on images whose uxtheme.dll lacks the dark mode
+      # ordinals. The server those tests exercise is the headless one anyway.
+      - name: Server-only tests
+        run: cargo test --locked --no-default-features --manifest-path src-tauri/Cargo.toml
       - name: Dataset tooling tests
         run: python scripts/test_dataset.py
       # Tauri embeds the frontend; a bare cargo build can retain the dev URL.

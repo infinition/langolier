@@ -1161,6 +1161,12 @@ mod tests {
         })
     }
     /// Reads one HTTP response off a socket, head and body.
+    ///
+    /// Routing reaches the palette window, so with the desktop feature on, the
+    /// test binary links the Windows GUI stack and fails to start on images
+    /// whose uxtheme.dll lacks the dark mode ordinals. The server it exercises
+    /// is the headless one anyway, so these run without that feature.
+    #[cfg(not(feature = "desktop"))]
     async fn roundtrip(app: Arc<App>, request: &str) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1213,6 +1219,7 @@ mod tests {
         // One noisy address must not silence the others.
         assert!(!over_chat_rate(&app, two))
     }
+    #[cfg(not(feature = "desktop"))]
     #[tokio::test]
     async fn serves_the_page_with_its_policy() {
         let answer = roundtrip(app(), "GET / HTTP/1.1\r\nHost: x\r\n\r\n").await;
@@ -1223,6 +1230,7 @@ mod tests {
         assert!(answer.contains("X-Frame-Options: DENY"));
         assert!(answer.contains("<!doctype html>"))
     }
+    #[cfg(not(feature = "desktop"))]
     #[tokio::test]
     async fn unknown_paths_and_methods_are_refused() {
         let answer = roundtrip(app(), "GET /secrets HTTP/1.1\r\nHost: x\r\n\r\n").await;
@@ -1230,6 +1238,7 @@ mod tests {
         let answer = roundtrip(app(), "DELETE / HTTP/1.1\r\nHost: x\r\n\r\n").await;
         assert!(answer.starts_with("HTTP/1.1 404 Not Found"), "{answer}")
     }
+    #[cfg(not(feature = "desktop"))]
     #[tokio::test]
     async fn a_bad_conversation_id_is_rejected_before_the_database() {
         let answer = roundtrip(
@@ -1241,6 +1250,7 @@ mod tests {
         assert!(answer.contains("invalid id"))
     }
     /// Administration is off by default: the routes must not even exist.
+    #[cfg(not(feature = "desktop"))]
     #[tokio::test]
     async fn admin_routes_are_absent_until_enabled() {
         let answer = roundtrip(
