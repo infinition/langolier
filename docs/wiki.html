@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Langolier Wiki</title>
+<meta name="description" content="How to install Langolier, feed it, build assistants, watch folders, bridge Telegram and query it from Shortcuts or Siri.">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#121213">
+<link rel="icon" type="image/png" href="langolier.png">
+<link rel="apple-touch-icon" href="langolier.png">
+<style>
+/* ===================================================================
+   Langolier - showcase page.
+   The tokens come from src/style.css so the page and the application
+   are the same object. Dark only, like the app.
+   No external request: no CDN, no webfont, no analytics.
+   =================================================================== */
+:root {
+  --bg: #121213;
+  --panel: #191a1b;
+  --panel-soft: #1c1b1a;
+  --line: #2b2b2e;
+  --line-soft: #363330;
+  --muted: #8b8b92;
+  --dim: #6f6b66;
+  --text: #e8e7e6;
+  --cream: #f1f1f2;
+  /* The accent is kept under the name the app uses. */
+  --lime: #e6a06b;
+  --orange: #e8834f;
+  --danger: #d9705f;
+  --radius: 10px;
+  --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+a { color: var(--lime); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 4px; }
+::selection { background: rgba(230,160,107,.25); }
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+p { margin: 0 0 1em; }
+p:last-child { margin-bottom: 0; }
+code, kbd { font-family: var(--mono); font-size: .92em; }
+.shell { max-width: 1140px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); }
+
+/* Top bar, the app's own header line. */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid var(--line);
+  background: rgba(18,18,19,.86);
+  backdrop-filter: blur(10px);
+  padding-top: env(safe-area-inset-top);
+}
+.topbar .shell { display: flex; align-items: center; gap: 14px; height: 58px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--cream); font-weight: 600; letter-spacing: -.02em; }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; border-radius: 7px; display: block; }
+.brand .dot { color: var(--lime); }
+.tabs { display: flex; gap: 2px; margin-left: 10px; flex: 1; }
+.tabs a {
+  padding: 6px 11px; border-radius: 8px; color: var(--muted);
+  font-size: 13px; transition: background .15s, color .15s;
+}
+.tabs a:hover { background: rgba(230,160,107,.08); color: var(--lime); text-decoration: none; }
+@media (max-width: 900px) { .tabs { display: none; } }
+.langswitch { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.langswitch button {
+  border: 0; background: none; color: var(--muted); font-family: inherit;
+  font-size: 11px; letter-spacing: .08em; padding: 5px 11px; cursor: pointer;
+}
+.langswitch button.on { background: var(--lime); color: #1a1207; font-weight: 600; }
+
+/* Hero. */
+.hero { position: relative; padding: clamp(56px, 9vw, 104px) 0 clamp(40px, 6vw, 72px); }
+.hero::before {
+  content: ''; position: absolute; inset: -10% 0 auto 0; height: 560px;
+  background: radial-gradient(58% 58% at 50% 0%, rgba(230,160,107,.10), transparent 70%);
+  pointer-events: none;
+}
+.hero .shell { position: relative; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-bottom: 18px; }
+.hero h1 { font-size: clamp(34px, 6vw, 62px); line-height: 1.05; margin-bottom: 20px; }
+.hero h1 .dot { color: var(--lime); }
+.lead { font-size: clamp(16px, 2.2vw, 19px); color: var(--muted); max-width: 62ch; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 19px; border-radius: var(--radius); font-size: 14px; font-weight: 500;
+  border: 1px solid var(--line-soft); color: var(--text);
+  transition: border-color .15s, background .15s, color .15s;
+}
+.btn:hover { border-color: var(--lime); color: var(--lime); text-decoration: none; }
+.btn.primary { background: var(--lime); border-color: var(--lime); color: #1a1207; font-weight: 600; }
+.btn.primary:hover { background: var(--orange); border-color: var(--orange); color: #1a1207; }
+
+/* Sections. */
+section { padding: clamp(46px, 7vw, 86px) 0; border-top: 1px solid var(--line); }
+.sec-head { margin-bottom: 34px; max-width: 70ch; }
+.sec-head h2 { font-size: clamp(24px, 3.4vw, 34px); margin-bottom: 12px; }
+.sec-head p { color: var(--muted); }
+.grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px; min-width: 0;
+}
+.card h3 { font-size: 16px; margin-bottom: 9px; color: var(--cream); }
+.card p { color: var(--muted); font-size: 14px; }
+.card .tag { display: inline-block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--lime); border: 1px solid rgba(230,160,107,.3); border-radius: 999px; padding: 2px 9px; margin-bottom: 12px; }
+
+/* Screenshots. */
+figure { margin: 0 0 30px; }
+figure img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+}
+figcaption { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+figcaption b { color: var(--cream); font-weight: 600; }
+
+/* Steps. */
+ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+ol.steps li {
+  counter-increment: s; position: relative; padding: 16px 18px 16px 52px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  color: var(--muted); font-size: 14px;
+}
+ol.steps li::before {
+  content: counter(s); position: absolute; left: 18px; top: 16px;
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: rgba(230,160,107,.14); color: var(--lime); font-size: 11px; font-weight: 700;
+}
+ol.steps b { color: var(--cream); font-weight: 600; }
+
+/* Tables. */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+th { color: var(--dim); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--cream); white-space: nowrap; }
+td code { color: var(--lime); }
+
+/* Code blocks. */
+pre {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.7;
+  color: var(--text); margin: 0 0 16px;
+}
+pre .c { color: var(--dim); }
+.note {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: rgba(230,160,107,.06); border: 1px solid rgba(230,160,107,.22);
+  border-radius: 12px; padding: 15px 17px; color: var(--muted); font-size: 14px;
+}
+.note b { color: var(--lime); font-weight: 600; }
+
+/* Footer. */
+footer { border-top: 1px solid var(--line); padding: 34px 0 calc(34px + env(safe-area-inset-bottom)); color: var(--dim); font-size: 13px; }
+footer .shell { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+.support { display: inline-flex; align-items: center; gap: 7px; color: var(--lime); }
+
+/* Both languages ship in the page; the root attribute decides which shows. */
+/* ===================================================================
+   The Langolier, alive. Lifted from the standalone animation so the
+   page, the application and the creature stay the same object.
+   The host decides the size; the component fills it.
+   =================================================================== */
+.langolier {
+  --pointer-x: 0;
+  --pointer-y: 0;
+  --idle-x: 0px;
+  --idle-y: 0px;
+  --idle-r: 0deg;
+  --breath: 0;
+  --pulse: 0;
+  --hover: 0;
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1351 / 1164;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.langolier:focus-visible {
+  filter: drop-shadow(0 0 0.8rem rgba(105, 160, 255, .75));
+}
+
+.langolier__body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 64%;
+  transform:
+    translate3d(
+      calc(var(--idle-x) + var(--pointer-x) * 7px),
+      calc(var(--idle-y) + var(--pointer-y) * 5px - var(--breath) * 8px),
+      0
+    )
+    rotateX(calc(var(--pointer-y) * -2.1deg))
+    rotateY(calc(var(--pointer-x) * 2.8deg))
+    rotateZ(calc(var(--idle-r) + var(--pointer-x) * 0.9deg))
+    scaleX(calc(1 + var(--breath) * 0.008 + var(--hover) * 0.012))
+    scaleY(calc(1 + var(--breath) * 0.016 + var(--hover) * 0.012));
+  transition: transform 90ms linear;
+  will-change: transform;
+}
+
+.langolier__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: 50% 64%;
+  filter:
+    drop-shadow(0 24px 34px rgba(0, 0, 0, .38))
+    brightness(calc(1 + var(--pulse) * .018));
+  transition: filter 160ms ease;
+}
+
+/* Ombre "au sol" qui respire légèrement en opposition au personnage. */
+.langolier__shadow {
+  position: absolute;
+  z-index: -1;
+  left: 22%;
+  right: 18%;
+  bottom: -2%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .48);
+  filter: blur(22px);
+  opacity: calc(.62 - var(--breath) * .09);
+  transform:
+    translate3d(calc(var(--pointer-x) * -4px), 0, -20px)
+    scaleX(calc(1 - var(--breath) * .035))
+    scaleY(calc(.86 - var(--breath) * .025));
+  will-change: transform, opacity;
+}
+
+/* Le glow ne couvre que les zones des yeux.
+   Il suit très légèrement le pointeur, ce qui donne une impression de regard. */
+.eye-glow {
+  position: absolute;
+  width: 10%;
+  aspect-ratio: 1.1;
+  border-radius: 50%;
+  opacity: calc(.10 + var(--pulse) * .15 + var(--hover) * .08);
+  background:
+    radial-gradient(
+      ellipse at 50% 50%,
+      rgba(118, 193, 255, .40) 0%,
+      rgba(48, 120, 255, .12) 38%,
+      transparent 70%
+    );
+  filter: blur(9px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transform:
+    translate3d(
+      calc(var(--pointer-x) * 2.5px),
+      calc(var(--pointer-y) * 2px),
+      8px
+    )
+    scale(calc(1 + var(--pulse) * .05));
+}
+
+.eye-glow--left {
+  left: 26.0%;
+  top: 7.8%;
+}
+
+.eye-glow--right {
+  left: 63.5%;
+  top: 15.6%;
+}
+
+/* Profondeur de bouche : sombre, neutre, sans vortex ni effet bleu.
+   Le gradient varie subtilement avec la respiration. */
+.mouth-depth {
+  position: absolute;
+  z-index: -0;
+  left: 25.2%;
+  top: 27.4%;
+  width: 50.8%;
+  height: 48.5%;
+  border-radius: 47% 48% 50% 50%;
+  pointer-events: none;
+  opacity: calc(.10 + var(--breath) * .025);
+  background:
+    radial-gradient(
+      ellipse at 50% 44%,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, .16) 58%,
+      rgba(0, 0, 0, .36) 100%
+    );
+}
+
+
+
+/* =========================================================
+   DOCUMENT INGESTION
+   Inspiré du prototype joint : les documents apparaissent
+   autour de la mascotte, suivent une trajectoire courbe,
+   rétrécissent puis se fragmentent en "knowledge bits".
+   Aucun tourbillon permanent n'est ajouté dans la bouche.
+   ========================================================= */
+
+.knowledge-layer {
+  position: absolute;
+  inset: -16%;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+  transform: translateZ(70px);
+}
+
+.flying-doc {
+  position: absolute;
+  /* Proportional to the creature, whatever size the host gives it. */
+  width: 7.2%;
+  min-width: 7px;
+  aspect-ratio: .76;
+  border-radius: 4px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.98), rgba(215,239,255,.96));
+  border: 1px solid rgba(135, 211, 255, .68);
+  box-shadow:
+    0 0 10px rgba(84, 190, 255, .80),
+    0 0 28px rgba(25, 104, 255, .32),
+    0 4px 14px rgba(0, 0, 0, .22);
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  backface-visibility: hidden;
+}
+
+.flying-doc::before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  right: 14%;
+  top: 22%;
+  height: 6%;
+  border-radius: 999px;
+  background: rgba(73, 118, 150, .70);
+  box-shadow:
+    0 8px 0 rgba(73, 118, 150, .62),
+    0 16px 0 rgba(73, 118, 150, .58),
+    0 24px 0 rgba(73, 118, 150, .50);
+}
+
+.flying-doc::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 32%;
+  aspect-ratio: 1;
+  background:
+    linear-gradient(225deg,
+      rgba(166,218,255,.78) 0 48%,
+      rgba(255,255,255,.98) 49% 100%);
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+  opacity: .88;
+}
+
+.knowledge-bit {
+  position: absolute;
+  width: 0.9%;
+  min-width: 2px;
+  aspect-ratio: 1;
+  border-radius: 1px;
+  background: #66d3ff;
+  box-shadow:
+    0 0 7px rgba(101, 211, 255, .95),
+    0 0 16px rgba(44, 116, 255, .80);
+  will-change: transform, opacity;
+}
+
+.mouth-ingest-flash {
+  position: absolute;
+  left: 50.6%;
+  top: 51.5%;
+  width: 11%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(.15);
+  opacity: 0;
+  background:
+    radial-gradient(circle,
+      rgba(235,249,255,.90) 0 7%,
+      rgba(88,190,255,.42) 18%,
+      rgba(27,93,255,.16) 38%,
+      transparent 70%);
+  filter: blur(3px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.langolier.is-feeding .mouth-ingest-flash {
+  animation: ingest-flash 720ms ease-out;
+}
+
+@keyframes ingest-flash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.12); }
+  28%  { opacity: .62; transform: translate(-50%, -50%) scale(1); }
+  56%  { opacity: .28; transform: translate(-50%, -50%) scale(.72); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.18); }
+}
+
+/* Petit "chomp" tactile au clic. */
+.langolier.is-reacting .langolier__body {
+  animation: chomp 620ms cubic-bezier(.19, .8, .25, 1);
+}
+
+.langolier.is-reacting .eye-glow {
+  animation: eye-pop 620ms ease-out;
+}
+
+@keyframes chomp {
+  0%   { transform: translate3d(0,0,0) scale(1) rotate(0); }
+  16%  { transform: translate3d(0,7px,18px) scaleX(1.055) scaleY(.93) rotate(-1deg); }
+  34%  { transform: translate3d(0,-15px,44px) scaleX(.975) scaleY(1.075) rotate(1.2deg); }
+  56%  { transform: translate3d(0,5px,20px) scaleX(1.02) scaleY(.975) rotate(-.45deg); }
+  100% { transform: translate3d(0,0,0) scale(1) rotate(0); }
+}
+
+@keyframes eye-pop {
+  0%, 100% { opacity: .18; transform: scale(1); }
+  34%      { opacity: .55; transform: scale(1.16); }
+}
+
+/* Réduction propre des animations pour l'accessibilité. */
+@media (prefers-reduced-motion: reduce) {
+  .langolier__body,
+  .langolier__shadow,
+  .eye-glow,
+  .langolier__image,
+  .knowledge-layer,
+  .mouth-ingest-flash {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+
+/* The header mark, three times the old icon. */
+.brand-mark { width: 78px; height: 78px; border-radius: 16px; display: block; }
+.topbar .shell { height: 96px; }
+@media (max-width: 560px) {
+  .brand-mark { width: 54px; height: 54px; border-radius: 12px; }
+  .topbar .shell { height: 72px; }
+}
+
+/* The creature lives in the hero, where the documents it swallows have room
+   to be seen. It reacts to the pointer and eats on hover or click. */
+.creature-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 6px;
+}
+.creature-slot .langolier {
+  width: min(64vw, 300px);
+  aspect-ratio: 1351 / 1164;
+}
+.creature-hint {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: .02em;
+}
+@media (min-width: 900px) {
+  /* Side by side with the pitch, rather than pushed under it. */
+  .hero .shell { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center; }
+  .hero .eyebrow, .hero h1, .hero .lead, .hero .cta { grid-column: 1; }
+  .creature-slot { grid-column: 2; grid-row: 1 / span 4; margin: 0; }
+  .creature-slot .langolier { width: 340px; }
+}
+
+[data-lang] { display: none; }
+html[lang="en"] [data-lang="en"], html[lang="fr"] [data-lang="fr"] { display: revert; }
+/* A component rule that sets its own display outranks the two above, so it
+   has to be restated here. `.card .tag` is the only one in this page. */
+.card .tag[data-lang] { display: none; }
+html[lang="en"] .card .tag[data-lang="en"],
+html[lang="fr"] .card .tag[data-lang="fr"] { display: inline-block; }
+</style>
+<style>
+/* Two columns on a desktop, one on a phone. Every page is in the document,
+   the anchors just move you through it. */
+.wiki-shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 44px; align-items: start; padding-block: 34px; }
+.wiki-nav { position: sticky; top: 112px; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.wiki-nav a { color: var(--muted); padding: 5px 10px; border-radius: 8px; }
+.wiki-nav a:hover { background: rgba(230,160,107,.08); color: var(--lime); text-decoration: none; }
+.wiki-nav .nav-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 16px 0 5px 10px; }
+.wiki-nav .nav-label:first-child { margin-top: 0; }
+.wiki-page { scroll-margin-top: 116px; padding-bottom: 42px; border-bottom: 1px solid var(--line); margin-bottom: 42px; }
+.wiki-page:last-child { border-bottom: 0; }
+.wiki-page h1 { font-size: clamp(26px, 3.6vw, 34px); margin-bottom: 18px; }
+.wiki-page h2 { font-size: 21px; margin: 32px 0 12px; }
+.wiki-page h3 { font-size: 16px; margin: 24px 0 10px; color: var(--cream); }
+.wiki-page p, .wiki-page li { color: var(--muted); }
+.wiki-page ul, .wiki-page ol { padding-left: 20px; margin: 0 0 1em; }
+.wiki-page li { margin-bottom: 5px; }
+.wiki-page .tablewrap { margin-bottom: 1em; }
+.wiki-page strong { color: var(--cream); }
+.wiki-page code { color: var(--lime); }
+@media (max-width: 900px) {
+  .wiki-shell { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .wiki-nav { position: static; flex-direction: row; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .wiki-nav .nav-label { flex-basis: 100%; margin: 8px 0 2px 4px; }
+  .wiki-nav .nav-label:first-child { margin-top: 0; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="shell">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="langolier.png" alt="">
+      <span>langolier<span class="dot">.</span></span>
+    </a>
+    <nav class="tabs">
+      <a href="index.html">Home</a>
+      <a href="index.html#install">Install</a>
+      <a href="https://github.com/infinition/langolier">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main class="shell wiki-shell">
+  <nav class="wiki-nav"><a href="#home">Langolier Wiki</a><span class="nav-label">Getting started</span><a href="#installation">Installation</a><a href="#first-steps">First steps</a><a href="#engines">Choosing an engine</a><span class="nav-label">Guides</span><a href="#assistants">Assistants</a><a href="#watches">Watches</a><a href="#telegram">Telegram</a><a href="#local-api">Local API, Shortcuts and Siri</a><a href="#export">Exporting a chatbot</a><span class="nav-label">Reference</span><a href="#settings">Settings</a><a href="#retrieval">How retrieval works</a></nav>
+  <div>
+<article id="home" class="wiki-page"><h1>Langolier Wiki</h1>
+<p><strong><a href="https://infinition.github.io/langolier/">infinition.github.io/langolier</a></strong></p>
+<p>Langolier is a local knowledge studio. You give it documents, code, videos and voice notes; it indexes them and answers your questions with citations pointing at the exact passage that backed each claim. Nothing leaves the machine unless you point it at a cloud API.</p>
+<p>New here? Start with <a href="#installation">Installation</a>, then <a href="#first-steps">First steps</a>.</p>
+<h3>Getting started</h3>
+<ul><li><a href="#installation">Installation</a> - download a build, or compile from source</li><li><a href="#first-steps">First steps</a> - add your first sources and ask a question</li><li><a href="#engines">Choosing an engine</a> - embedded, Ollama, LM Studio or a cloud provider</li></ul>
+<h3>Guides</h3>
+<ul><li><a href="#assistants">Assistants</a> - profiles with a mission, a scope and their own limits</li><li><a href="#watches">Watches</a> - folders that feed themselves into the memory</li><li><a href="#telegram">Telegram</a> - your assistant in a chat, no open port</li><li><a href="#local-api">Local API, Shortcuts and Siri</a> - ask from anywhere on your machine</li><li><a href="#export">Exporting a chatbot</a> - ship an assistant to another machine</li></ul>
+<h3>Reference</h3>
+<ul><li><a href="#settings">Settings</a> - what every setting does and where it lives</li><li><a href="#retrieval">How retrieval works</a> - BM25, vectors, fusion, reranking, abstention</li></ul>
+<h3>Language</h3>
+<p>The interface ships in English and French. The switch sits at the bottom of the sidebar and the choice persists. This wiki is written in English; the README carries a full French section.</p>
+<h3>License</h3>
+<p><a href="https://github.com/infinition/langolier/blob/main/LICENSE">MPL 2.0</a>.</p></article>
+<article id="installation" class="wiki-page"><h1>Installation</h1>
+<h3>Download a build</h3>
+<p>Builds are published on the <a href="https://github.com/infinition/langolier/releases">releases page</a>.</p>
+<div class="tablewrap"><table><thead><tr><th>Platform</th><th>File</th></tr></thead><tbody><tr><td>macOS (Apple Silicon)</td><td><code>.dmg</code></td></tr><tr><td>Windows</td><td><code>.exe</code> installer</td></tr><tr><td>Linux</td><td><code>.AppImage</code>, <code>.deb</code> or <code>.rpm</code></td></tr></tbody></table></div>
+<p>macOS builds are ad hoc signed. On first launch, right click the app and pick Open, otherwise Gatekeeper refuses it.</p>
+<h3>What else you need</h3>
+<p>Langolier answers out of the box with its embedded engine. Some sources need external tools, and the application tells you which one is missing when it needs it.</p>
+<div class="tablewrap"><table><thead><tr><th>Tool</th><th>Needed for</th></tr></thead><tbody><tr><td>Poppler</td><td>PDF page counts and rendering scanned pages</td></tr><tr><td>Tesseract</td><td>OCR on scanned pages</td></tr><tr><td>FFmpeg</td><td>audio and video</td></tr><tr><td>whisper.cpp</td><td>transcription</td></tr><tr><td>yt-dlp</td><td>adding a video by URL</td></tr></tbody></table></div>
+<p>On macOS, <code>Install-Mac.command</code> installs all of them through Homebrew and fetches the transcription model. On Windows, <code>Install-Windows.bat</code> does the same.</p>
+<h3>Build from source</h3>
+<p>Requires the <a href="https://v2.tauri.app/start/prerequisites/">Tauri prerequisites</a>, Rust stable, Node 20 or newer, and <code>cmake</code> for the embedded llama.cpp.</p>
+<pre>git clone https://github.com/infinition/langolier.git
+cd langolier
+npm ci
+npm run tauri build</pre>
+<p>For development, <code>npm run desktop</code> starts Vite and the Tauri shell with hot reload.</p>
+<p>llama.cpp tunes itself for the processor that compiles it, so build on the machine that will run it.</p>
+<h3>Where your data lives</h3>
+<p>One SQLite file in the application data folder, holding sources, passages, vectors and conversations. Original files stay where they are: removing a source drops its passages and vectors from the index, never the file.</p>
+<div class="tablewrap"><table><thead><tr><th>System</th><th>Path</th></tr></thead><tbody><tr><td>macOS</td><td><code>~/Library/Application Support/local.langolier.studio</code></td></tr><tr><td>Windows</td><td><code>%APPDATA%\local.langolier.studio</code></td></tr><tr><td>Linux</td><td><code>~/.local/share/local.langolier.studio</code></td></tr></tbody></table></div>
+<p>Back up that folder and you have backed up everything.</p></article>
+<article id="first-steps" class="wiki-page"><h1>First steps</h1>
+<h3>Add your first sources</h3>
+<p>Open <strong>Sources</strong> and press <strong>Add sources</strong>. You can drop a folder, pick files, paste a piece of text, or give the address of a video.</p>
+<p>Supported without any extra tool: PDF, DOCX, PPTX, XLSX, ODT, ODP, ODS, Markdown, plain text, CSV, JSON, notebooks, source files and subtitles. Audio and video go through transcription, which needs whisper.cpp and FFmpeg.</p>
+<p>Each file is read, cut into passages, and turned into vectors. The table shows where each source stands: its language, its passage count, and how many of those passages already carry a vector. A source is usable for word search as soon as its passages exist, before the vectors are finished.</p>
+<h3>Ask a question</h3>
+<p>Open <strong>Conversation</strong> and ask. The answer carries numbered citations, and the chips below it open the exact passage behind each claim.</p>
+<p>The mode selector under the question decides how the memory is searched:</p>
+<div class="tablewrap"><table><thead><tr><th>Mode</th><th>What it does</th></tr></thead><tbody><tr><td>Hybrid</td><td>Words and meaning, fused. The default, and the right answer most of the time</td></tr><tr><td>Lexical</td><td>Words only, through BM25. No model needed to search</td></tr><tr><td>Semantic</td><td>Meaning only, through vectors</td></tr><tr><td>General</td><td>Answers from the model alone, without your sources</td></tr></tbody></table></div>
+<h3>When it says it does not know</h3>
+<p>In strict mode, an answer with no supporting passage is refused rather than guessed. That refusal is a feature: it means the corpus does not hold what you asked for.</p>
+<p>Three things usually explain it. The source may not be indexed yet, which the Sources table tells you. The question may use words absent from your documents, which hybrid search handles better than lexical. Or the abstention threshold may be set high, under</p>
+<p><strong>Engines &gt; La rigueur</strong>.</p>
+<p>The abstention sentence is yours to write. Change it to something that sounds like you.</p>
+<h3>What to do next</h3>
+<ul><li>Point Langolier at a folder that keeps filling, with <a href="#watches">Watches</a></li><li>Give a subject its own profile, with <a href="#assistants">Assistants</a></li><li>Ask from outside the app, with <a href="#local-api">the local API</a></li></ul></article>
+<article id="engines" class="wiki-page"><h1>Choosing an engine</h1>
+<p>Langolier separates the brain from the memory. The model that writes answers and the model that turns text into vectors are configured independently, so a cloud chat model can sit next to a local embedder.</p>
+<h3>The embedded engine</h3>
+<p>llama.cpp, built into the application. Pick a curated tag under <strong>Engines</strong>, press Install, and the GGUF lands in the application cache.</p>
+<div class="tablewrap"><table><thead><tr><th>Model</th><th>Size</th><th>Notes</th></tr></thead><tbody><tr><td><code>qwen3:4b-instruct</code></td><td>2.5 GB</td><td>Recommended, around 30 tokens per second</td></tr><tr><td><code>qwen3:8b</code></td><td>5.0 GB</td><td>Surer, around 17 tokens per second</td></tr><tr><td><code>qwen3:1.7b</code></td><td>1.4 GB</td><td>Very fast, may drift into English</td></tr></tbody></table></div>
+<p>Any GGUF path works too. Weights already pulled by Ollama are linked into the cache rather than downloaded again.</p>
+<p>Idle models are unloaded after a configurable pause, five minutes by default, so memory comes back without quitting the application.</p>
+<p>Prefer <code>qwen3:4b-instruct</code> over the bare <code>qwen3:4b</code>: the latter reasons out loud and lets its thinking leak into the answer.</p>
+<h3>Ollama, LM Studio and compatible servers</h3>
+<p>Point the address at a local server. Ollama on <code>http://127.0.0.1:11434</code>, LM Studio on its own port. The model has to be pulled on that side first.</p>
+<p>If you use Ollama for embeddings, it has to be running when Langolier searches, or hybrid search falls back to words only. The embedded engine has no such dependency, since it starts with the application.</p>
+<h3>A cloud provider</h3>
+<p>Supported providers are listed in the settings. Your API key is stored in the application database, and your questions and the retrieved passages travel to the provider. The interface states this next to the setting.</p>
+<p>Token caps on an assistant profile bound the bill.</p>
+<h3>Changing the embedding model</h3>
+<p>Vectors produced by one model cannot be compared with vectors produced by another. Langolier refuses to mix them: it says so, falls back to word search, and offers to reindex the sources.</p>
+<p>Word search keeps working throughout, so the application stays usable while vectors are rebuilt.</p></article>
+<article id="assistants" class="wiki-page"><h1>Assistants</h1>
+<p>An assistant is a named profile: a mission, a scope of knowledge, an engine, a set of caps and a theme. Langolier without a profile answers from everything with the global settings; a profile narrows and specialises that.</p>
+<h3>Creating one</h3>
+<p>Open <strong>Assistants</strong> and create a profile. What each field changes:</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Effect</th></tr></thead><tbody><tr><td>Mission</td><td>Prepended to the instructions, so the assistant knows what it is for</td></tr><tr><td>Welcome</td><td>The first message a visitor sees on the exported chat page</td></tr><tr><td>Scope</td><td>Which sources it may answer from: everything, or a chosen set</td></tr><tr><td>Engine</td><td>Its own model and provider, overriding the global one</td></tr><tr><td>Caps</td><td>A ceiling on tokens per conversation and per day</td></tr><tr><td>Theme</td><td>The colours of its exported page</td></tr><tr><td>Language</td><td>English, French, or the visitor&#x27;s own</td></tr></tbody></table></div>
+<h3>Scope</h3>
+<p>Scope is the difference between a general assistant and a useful one. A profile bound to a handful of folders answers about those folders and abstains elsewhere, which is usually what you want when you hand it to someone else.</p>
+<p>Sources outside the scope are not searched at all. They are not hidden after the fact, they never enter the retrieval.</p>
+<h3>Caps and privacy</h3>
+<p>Token caps bound an API bill. When a conversation reaches its cap, the assistant says so instead of silently continuing to spend.</p>
+<p><strong>Hide source names</strong> keeps document titles out of the answers. The citations still work and still point at real passages, but the reader does not learn that your <code>2024-negotiation-notes.pdf</code> exists.</p>
+<h3>Exporting</h3>
+<p>Export produces a folder holding a <code>.langolier</code> bundle, a window launcher, a web launcher and server scripts. See <a href="#export">Exporting a chatbot</a>.</p>
+<p>The profile travels with its scope, its engine and its caps. What does not travel: your other sources, your other profiles, your conversations.</p></article>
+<article id="watches" class="wiki-page"><h1>Watches</h1>
+<p>A watch is a folder that feeds itself into the memory. You point Langolier at it, it is scanned on a timer, and anything supported that lands there is ingested on its own.</p>
+<h3>Adding one</h3>
+<p>Open <strong>Vigies</strong> and pick a folder. It can be local, or a mounted network volume such as a NAS share.</p>
+<p>Two modes, and the difference is not reversible for your files:</p>
+<div class="tablewrap"><table><thead><tr><th>Mode</th><th>What happens to the files</th></tr></thead><tbody><tr><td>Sync</td><td>They stay where they are. Langolier reads them in place</td></tr><tr><td>Hoover</td><td>They are moved into Langolier&#x27;s own folder once ingested</td></tr></tbody></table></div>
+<p>Sync is the safe default. Hoover suits an inbox you want emptied, a scanner output folder for instance.</p>
+<h3>The interval</h3>
+<p>The page carries a global interval, applied to every watch that does not set its own. A single watch can override it: a fast folder every minute, an archive once a day.</p>
+<p>Network folders are polled rather than notified. An unmounted volume is flagged on the card and picked up again as soon as it reappears, without losing what it already knew.</p>
+<h3>Reading a card</h3>
+<p>Each card shows what is ready, what is queued, what failed, and when it was last scanned. A failed source names its reason, and the <strong>See details</strong> link shows the error in full.</p>
+<p>A watch can be paused without losing anything. What it already indexed stays, and it resumes where it stopped.</p>
+<h3>While Langolier is in the menu bar</h3>
+<p>By default, scanning stands down when Langolier runs without its window, which spares the disk and the battery. A folder filled in the meantime is picked up when you open the window again.</p>
+<p>To keep scanning anyway, turn on <strong>Keep watching folders in the menu bar</strong>, on this same page.</p>
+<h3>Duplicates</h3>
+<p>A file whose content is already indexed is not ingested twice. It gets its own status, Duplicate, naming the source that already holds those bytes. It is not an error, and the library lets you filter those rows and remove them in one go.</p></article>
+<article id="telegram" class="wiki-page"><h1>Telegram</h1>
+<p>An exported assistant can answer in a Telegram chat. The bridge uses long polling, so no port is opened on your machine and no domain is needed.</p>
+<h3>Setting it up</h3>
+<ol><li>Talk to <a href="https://t.me/BotFather">@BotFather</a> on Telegram and create a bot. It gives</li></ol>
+<p>   you a token.</p>
+<ol><li>Paste the token into the assistant profile, under its Telegram section.</li><li>Press the test button. It confirms the token reaches a real bot.</li><li>Export the assistant, then run it. The bridge starts with the server.</li></ol>
+<h3>Who may talk to it</h3>
+<p>The whitelist accepts numeric ids or <code>@handles</code>, comma separated. Leave it empty and anyone who finds the bot can talk to it.</p>
+<h3>How conversations map</h3>
+<p>One Telegram chat maps to one conversation, so the assistant remembers the thread. <code>/new</code> starts another.</p>
+<p>Caps and source privacy apply exactly as they do on the web page: a token cap reached in Telegram stops the same way, and hidden source names stay hidden.</p>
+<h3>What to keep in mind</h3>
+<p>Messages travel through Telegram&#x27;s servers. Whatever your assistant answers there leaves your machine, citations included. Keep it to content that may go there.</p>
+<p>For a test or a second instance, <code>LANGOLIER_DISABLE_TELEGRAM=1</code> keeps the server from polling the bot, so two copies do not steal each other&#x27;s updates.</p></article>
+<article id="local-api" class="wiki-page"><h1>Local API, Shortcuts and Siri</h1>
+<p>Langolier can answer over a local HTTP API, so Shortcuts, Siri or any local agent can query your memory without opening the application.</p>
+<h3>Switching it on</h3>
+<p>Under <strong>Engines &gt; Local API</strong>, turn on <strong>Answer local requests</strong>. A token is generated on the spot, and the address appears next to it. Use <strong>Test the API</strong> to confirm it answers.</p>
+<p>What the API is, precisely:</p>
+<ul><li>It listens on <code>127.0.0.1</code> only. Nothing is exposed to your network, ever.</li><li>It answers <code>POST</code> only, so a question never travels in a URL.</li><li>Every request needs <code>Authorization: Bearer &lt;token&gt;</code>. Without a token configured, the</li></ul>
+<p>  endpoint refuses everything, including a lucky guess.</p>
+<ul><li>Twelve questions a minute per address.</li><li>Answering takes the same lock as the window, so a question from Siri and a question</li></ul>
+<p>  typed in the app never generate at the same time.</p>
+<p>Starting and stopping takes effect immediately, without restarting the application.</p>
+<h3>Two endpoints</h3>
+<p><code>/api/ask</code> writes the answer. That takes a model, local or remote, the same one the application uses.</p>
+<pre>POST http://127.0.0.1:8787/api/ask
+Authorization: Bearer &lt;token&gt;
+
+{ &quot;question&quot;: &quot;How do you purify water?&quot; }</pre>
+<pre>{
+  &quot;content&quot;: &quot;Boiling is the surest method [1]...&quot;,
+  &quot;text&quot;: &quot;Boiling is the surest method [1]...\n\nSources\n[1] Guide.pdf, Page 222&quot;,
+  &quot;sources&quot;: [ { &quot;name&quot;: &quot;Guide.pdf&quot;, &quot;locator&quot;: &quot;Page 222&quot;, &quot;text&quot;: &quot;...&quot; } ],
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;warning&quot;: null
+}</pre>
+<p><code>content</code> is the answer alone, which is what you want read out loud. <code>text</code> is the same answer with its sources listed underneath, which is what you want displayed. One request gives you both.</p>
+<p><code>/api/search</code> stops before the writing and returns the passages, so whatever called it can write instead.</p>
+<pre>POST http://127.0.0.1:8787/api/search
+Authorization: Bearer &lt;token&gt;
+
+{ &quot;question&quot;: &quot;How do you purify water?&quot;, &quot;mode&quot;: &quot;lexical&quot; }</pre>
+<pre>{
+  &quot;sources&quot;: [
+    { &quot;n&quot;: 1, &quot;name&quot;: &quot;Guide.pdf&quot;, &quot;locator&quot;: &quot;Page 222&quot;, &quot;text&quot;: &quot;...&quot;, &quot;score&quot;: 0.81 }
+  ],
+  &quot;warning&quot;: null
+}</pre>
+<h3>What each mode costs</h3>
+<p>This matters if you want Langolier to run without any model at all.</p>
+<div class="tablewrap"><table><thead><tr><th>Mode</th><th>What it needs</th></tr></thead><tbody><tr><td><code>exact</code>, <code>lexical</code></td><td>Nothing. Retrieval is pure SQLite, no model involved</td></tr><tr><td><code>hybrid</code>, <code>semantic</code></td><td>The embedding engine, to turn your question into a vector</td></tr></tbody></table></div>
+<p>The relevance judge, when left on under <strong>Engines &gt; La rigueur</strong>, uses a model on top of that. Turn it off if you want retrieval to stay free of any model.</p>
+<p>So a shortcut calling <code>/api/search</code> in <code>lexical</code> mode asks nothing of any engine: it reads your index and hands back passages. Whoever called it does the writing.</p>
+<h3>Wiring it to Siri</h3>
+<p>In the Shortcuts app, create a shortcut named <strong>Search my memory</strong>:</p>
+<ol><li><strong>Ask for input</strong>, text, with a prompt such as &quot;What are you looking for?&quot;</li><li><strong>Get contents of URL</strong> on <code>http://127.0.0.1:8787/api/ask</code></li></ol>
+<p>   - Method <code>POST</code>    - Header <code>Authorization</code> set to <code>Bearer</code> followed by your token    - Request body JSON, one field <code>question</code>, holding the provided input</p>
+<ol><li><strong>Get dictionary value</strong> for <code>text</code>, then <strong>Show result</strong></li><li>Optionally, a second <strong>Get dictionary value</strong> for <code>content</code> feeding <strong>Speak text</strong>,</li></ol>
+<p>   so the source list is displayed but not read aloud</p>
+<p>Then say the shortcut&#x27;s name to Siri. Siri asks your question, the shortcut calls Langolier, and the answer comes back with its citations.</p>
+<h3>Troubleshooting</h3>
+<p><strong>Nothing answers.</strong> Check the application is running and the switch is on. The API lives in the application process, so quitting Langolier stops it. The menu bar mode keeps it alive without a window.</p>
+<p><strong>401.</strong> The token in the shortcut no longer matches the one in the settings. Regenerating the token invalidates the old one.</p>
+<p><strong>The answer mentions lexical search only.</strong> The embedding engine is out of reach, so hybrid search fell back to words. If you use Ollama for embeddings, it has to be running.</p></article>
+<article id="export" class="wiki-page"><h1>Exporting a chatbot</h1>
+<p>Export turns an assistant into something that runs on another machine: a folder holding a <code>.langolier</code> bundle, a window launcher, a web launcher and server scripts.</p>
+<h3>What travels</h3>
+<p>The bundle carries the profile, the sources in its scope, their passages and their vectors, and the settings it needs. It does not carry your other sources, your other profiles, or your conversations.</p>
+<h3>Running it</h3>
+<pre>./server.sh                 # chat page on 0.0.0.0:8080
+./chatbotweb --serve --port 8787 --data ./state</pre>
+<p>The window launcher opens a real window instead of a browser tab. It can sit in the menu bar or system tray, start hidden, and pop a floating question bar on a global shortcut, on macOS, Windows and Linux.</p>
+<p>The page speaks the visitor&#x27;s language, English or French, or the one pinned in the profile.</p>
+<h3>Updating a deployed bot</h3>
+<p>Drop a new <code>.langolier</code> next to the launcher. It is picked up in under thirty seconds without a restart, and conversations survive the swap.</p>
+<h3>When you have no file access</h3>
+<p>Turn on <strong>Remote administration</strong> in the profile before exporting, with a secret. A gear then sits in the chat page footer: with the secret, you can import a bundle from the browser, pick any earlier version from a list and restore it, or delete versions you no longer need.</p>
+<p>Every bundle the chatbot ever ran is kept, twenty at most, named, timestamped and deduplicated. The running version and the one the kit shipped with cannot be deleted.</p>
+<p>Five wrong secrets pause the admin routes for fifteen minutes. When administration is off, the routes do not exist at all.</p>
+<p>There is deliberately no export from the page: nothing leaves the server through it, so the corpus and the API key stay where you put them.</p>
+<h3>Docker</h3>
+<p>The server build needs no desktop libraries. <code>docker/</code> holds a Dockerfile and a Compose file.</p>
+<pre>mkdir -p docker/data docker/state
+cp ~/Desktop/my-assistant/my-assistant.langolier docker/data/
+cd docker &amp;&amp; docker compose up -d --build
+curl -fsS http://localhost:8787/api/health</pre>
+<div class="tablewrap"><table><thead><tr><th>Mount</th><th>Contents</th></tr></thead><tbody><tr><td><code>./data</code></td><td>The <code>.langolier</code>, and for an embedded export, <code>models/*.gguf</code>. Replace the bundle here to update</td></tr><tr><td><code>./state</code></td><td>The working database and the conversations. Back this up</td></tr></tbody></table></div>
+<p>llama.cpp tunes itself for the processor that compiles it, so build the image on the host that will run it. On a NAS or a small VPS, a cloud provider profile is lighter: the container then only embeds text, and a 2 GB memory cap is enough. With <code>network_mode: host</code>, the Telegram bridge works without extra plumbing.</p></article>
+<article id="settings" class="wiki-page"><h1>Settings</h1>
+<p>Where each setting lives, and what it actually changes. A setting sits on the page of the thing it governs; what governs the engine itself stays under <strong>Engines</strong>.</p>
+<h3>Sources &gt; Processing</h3>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Pause processing</td><td>Holds the whole queue. Watches keep spotting files, nothing is ingested, nothing is lost</td></tr><tr><td>Keep processing sources in the menu bar</td><td>Off by default. OCR, transcription and vectors are what heat the machine</td></tr><tr><td>Passage length</td><td>How long a passage is cut, in characters. Applies to sources indexed from then on</td></tr><tr><td>Overlap between passages</td><td>How much two consecutive passages share</td></tr></tbody></table></div>
+<h3>Vigies</h3>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Scan every</td><td>The interval every watch falls back to. A watch can override it</td></tr><tr><td>Keep watching folders in the menu bar</td><td>Off by default. A folder filled meanwhile is picked up when the window reopens</td></tr></tbody></table></div>
+<h3>Engines &gt; Le cerveau</h3>
+<p>The model that writes. Provider, address, model, answer length, and how long an idle model stays in memory before it is unloaded.</p>
+<p>Pointing the brain at a cloud provider sends your questions and the retrieved passages to it. The interface says so next to the setting.</p>
+<h3>Engines &gt; La mémoire</h3>
+<p>The embedding engine, and how much is retrieved.</p>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Embedding server and model</td><td>What turns text into vectors. Changing it invalidates existing vectors</td></tr><tr><td>Passages retrieved</td><td>How many passages reach the answer</td></tr><tr><td>Candidates per search arm</td><td>How many each arm brings back before fusion</td></tr><tr><td>Passages per source</td><td>Caps what one document may contribute. Zero lifts the cap</td></tr></tbody></table></div>
+<h3>Engines &gt; La rigueur</h3>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Answer only from the sources</td><td>Strict mode. Without a supporting passage, the abstention sentence is used</td></tr><tr><td>Abstention sentence</td><td>Yours to write. What it says when it does not know</td></tr><tr><td>Relevance judge</td><td>A model rereads the candidates and scores them. Below the threshold, it abstains</td></tr><tr><td>Judge model</td><td>Empty means the conversation model</td></tr><tr><td>Verify the answer after writing</td><td>A second call checks each claim. Safer, doubles the time</td></tr><tr><td>Minimum cosine, minimum BM25</td><td>Raw floors, applied before the judge</td></tr></tbody></table></div>
+<h3>Engines &gt; La palette</h3>
+<p>The global shortcut that opens the floating question bar from anywhere.</p>
+<h3>Engines &gt; In the background</h3>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Icon in the menu bar</td><td>Closing the window then releases it, and the app leaves the Dock</td></tr><tr><td>Start hidden</td><td>Opens without a window; the icon and the shortcut are there</td></tr><tr><td>Launch at login</td><td>Starts hidden at login</td></tr></tbody></table></div>
+<h3>Engines &gt; Local API</h3>
+<div class="tablewrap"><table><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody><tr><td>Answer local requests</td><td>Starts the loopback server. See <a href="#local-api">Local API</a></td></tr><tr><td>Port</td><td>Default 8787</td></tr><tr><td>Access token</td><td>Required on every request. Regenerating it invalidates the old one</td></tr></tbody></table></div>
+<h3>Where settings are stored</h3>
+<p>In the same SQLite file as everything else, so they survive reinstalling the application. Launch at login is the exception: it writes a system file, a LaunchAgent on macOS, a registry key on Windows, a <code>.desktop</code> entry on Linux, because nothing inside the application could start it.</p></article>
+<article id="retrieval" class="wiki-page"><h1>How retrieval works</h1>
+<p>Every answer starts by finding passages. Understanding this explains most of what the settings do.</p>
+<h3>Cutting sources into passages</h3>
+<p>A source is read, then cut into overlapping passages. The cut lands on a sentence boundary when one is within reach, so a passage does not start mid-word.</p>
+<p>Length and overlap are set under <strong>Sources &gt; Processing</strong>. They apply to sources indexed from then on; existing passages keep the length they were cut with until a reindex.</p>
+<h3>Two searches, fused</h3>
+<div class="tablewrap"><table><thead><tr><th>Arm</th><th>What it finds</th></tr></thead><tbody><tr><td>BM25, through SQLite FTS5</td><td>The passages holding your words</td></tr><tr><td>Dense vectors</td><td>The passages holding your meaning, whatever the words</td></tr></tbody></table></div>
+<p>Both arms bring back candidates, and the two lists are fused with Reciprocal Rank Fusion: a passage ranked high by either arm survives, a passage ranked high by both wins.</p>
+<p>Vectors are stored normalised, so comparing two of them is a plain dot product.</p>
+<p><strong>Candidates per search arm</strong> decides how many each arm brings back before fusion. Wider catches more and costs more to rerank.</p>
+<p><strong>Passages per source</strong> keeps one talkative document from filling the whole answer.</p>
+<h3>The judge</h3>
+<p>With the relevance judge on, a model reads the surviving candidates and scores each one. Below the threshold, the assistant abstains before writing anything.</p>
+<p>This is the difference between an answer that quotes a vaguely related paragraph and one that admits the corpus does not cover the question. It costs one extra model call.</p>
+<h3>Grounding</h3>
+<p>In strict mode, the model may only use the retrieved passages for factual claims, and must cite them inline. Citation markers are checked against the passages that were actually supplied: a reference to a source that does not exist is caught.</p>
+<p>That check is about reference bounds, not about truth. It confirms <code>[2]</code> points at a real passage, not that the sentence faithfully reflects it.</p>
+<p><strong>Verify the answer after writing</strong> adds a second call that checks each claim against the passages. Safer, and it doubles the response time.</p>
+<h3>When vectors are missing</h3>
+<p>Changing the embedding model makes existing vectors incomparable: they were produced by a different model. Langolier does not mix them. It says so, falls back to word search, and offers to reindex.</p>
+<p>Word search keeps working the whole time.</p></article>
+  </div>
+</main>
+<footer>
+  <div class="shell">
+    <span>Langolier · MPL-2.0 · <a href="https://github.com/infinition/langolier">github.com/infinition/langolier</a></span>
+    <a class="support" href="https://www.buymeacoffee.com/infinition">Support the project</a>
+  </div>
+</footer>
+</body>
+</html>
