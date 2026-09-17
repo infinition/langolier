@@ -126,7 +126,8 @@ function mountLangolier(el, options) {
   // ---------------------------------------------------------
   // Ingestion de documents
   // ---------------------------------------------------------
-  const knowledgeLayer = document.querySelector("#knowledgeLayer");
+  // Inside the mounted element, so several creatures can live on one page.
+  const knowledgeLayer = el.querySelector(".knowledge-layer");
   const reducedMotionForFeed = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function mouthPoint() {

@@ -243,6 +243,29 @@ fn apply_local_api(state: &State<AppState>, s: &Settings) -> Res<()> {
     println!("Local API: http://127.0.0.1:{started}/api/ask");
     Ok(())
 }
+/// Opens a link in the real browser. A target="_blank" inside the webview
+/// goes nowhere, and only these three destinations are allowed out.
+#[tauri::command]
+fn open_link(target: String) -> Res<()> {
+    let url = match target.as_str() {
+        "site" => "https://infinition.github.io/langolier/",
+        "source" => "https://github.com/infinition/langolier",
+        "support" => "https://www.buymeacoffee.com/infinition",
+        _ => return Err("Unknown link".into()),
+    };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map_err(err)?;
+    Ok(())
+}
 /// A fresh token for the local API. The caller saves it with the settings.
 #[tauri::command]
 fn new_local_token() -> String {
@@ -724,6 +747,7 @@ pub fn run() {
             crate::cmd_assistants::delete_api_key,
             crate::cmd_assistants::use_api_key,
             crate::cmd_assistants::telegram_check,
+            open_link,
             new_local_token,
             test_local_api,
             crate::cmd_assistants::save_assistant,

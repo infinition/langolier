@@ -9,11 +9,28 @@ import type { Source } from "../types";
 /// swallow documents, which is what ingestion looks like from the outside.
 export function Logo({
   small = false,
+  alive = false,
   busy = false,
 }: {
   small?: boolean;
+  /// Only one of them breathes: the sidebar mark. A chat bubble carries a
+  /// still image, and no animation loop of its own.
+  alive?: boolean;
   busy?: boolean;
 }) {
+  if (!alive) {
+    return (
+      <img
+        className={`logo-symbol ${small ? "small" : ""}`}
+        src="/icon.png"
+        alt=""
+        draggable={false}
+      />
+    );
+  }
+  return <AliveLogo small={small} busy={busy} />;
+}
+function AliveLogo({ small, busy }: { small: boolean; busy: boolean }) {
   const host = useRef<HTMLSpanElement>(null);
   const alive = useRef<ReturnType<typeof mountLangolier>>(null);
   useEffect(() => {

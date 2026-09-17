@@ -1133,7 +1133,7 @@ nav button:hover {
   gap: 4px;
   padding: 10px 4px 2px;
 }
-.sidebar-links a {
+.sidebar-links button {
   display: grid;
   place-items: center;
   width: 28px;
@@ -1144,11 +1144,11 @@ nav button:hover {
     color 0.15s ease,
     background 0.15s ease;
 }
-.sidebar-links a:hover {
+.sidebar-links button:hover {
   color: var(--lime);
   background: rgba(230, 160, 107, 0.09);
 }
-.sidebar-links a.support:hover {
+.sidebar-links button.support:hover {
   color: var(--orange);
 }
 /* Settings that belong to a page sit above its content, not in a sidebar. */

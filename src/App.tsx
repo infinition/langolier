@@ -388,7 +388,7 @@ export default function App() {
     <div className={`app ${sidebar ? "" : "collapsed"}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => setPage("chat")}>
-          <Logo busy={ingesting} />
+          <Logo alive busy={ingesting} />
           <span>
             langolier<span className="brand-dot">.</span>
           </span>
@@ -493,34 +493,25 @@ export default function App() {
             <ChevronRight size={14} />
           </button>
           <div className="sidebar-links">
-            <a
-              href="https://infinition.github.io/langolier/"
-              target="_blank"
-              rel="noreferrer"
-              title={t("The website")}
-              aria-label={t("The website")}
-            >
-              <Globe size={15} />
-            </a>
-            <a
-              href="https://github.com/infinition/langolier"
-              target="_blank"
-              rel="noreferrer"
-              title={t("The source code")}
-              aria-label={t("The source code")}
-            >
-              <Github size={15} />
-            </a>
-            <a
-              className="support"
-              href="https://www.buymeacoffee.com/infinition"
-              target="_blank"
-              rel="noreferrer"
-              title={t("Support the project")}
-              aria-label={t("Support the project")}
-            >
-              <Coffee size={15} />
-            </a>
+            {(
+              [
+                ["site", Globe, t("The website")],
+                ["source", Github, t("The source code")],
+                ["support", Coffee, t("Support the project")],
+              ] as const
+            ).map(([target, Icon, label]) => (
+              <button
+                key={target}
+                className={target === "support" ? "support" : ""}
+                title={label}
+                aria-label={label}
+                onClick={() =>
+                  void api("open_link", { target }).catch(reportError)
+                }
+              >
+                <Icon size={15} />
+              </button>
+            ))}
           </div>
         </div>
       </aside>
