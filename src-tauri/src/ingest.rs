@@ -113,6 +113,25 @@ async fn command_retry(name: &str, args: &[String], timeout: u64, tries: u32) ->
 /// author's own subtitles are punctuated, which a small whisper model is not.
 /// Returns the subtitle file and the title.
 async fn fetch_subtitles(db: &Db, id: &str, url: &str, auto: bool) -> Option<(PathBuf, String)> {
+    // Written subtitles come in a handful of variants, `fr-FR` among them, so
+    // a pattern is safe and catches them all.
+    if let Some(found) = try_subtitles(db, id, url, false, "fr.*,en.*").await {
+        return Some(found);
+    }
+    if !auto {
+        return None;
+    }
+    // Machine ones hold a translation of every language into every other:
+    // the same pattern would ask for sixty files. Exact codes only.
+    try_subtitles(db, id, url, true, "fr,en").await
+}
+async fn try_subtitles(
+    db: &Db,
+    id: &str,
+    url: &str,
+    auto: bool,
+    langs: &str,
+) -> Option<(PathBuf, String)> {
     let dir = db.root.join("media");
     let template = dir.join(format!("{id}.%(ext)s"));
     let mut args: Vec<String> = vec![
@@ -121,9 +140,8 @@ async fn fetch_subtitles(db: &Db, id: &str, url: &str, auto: bool) -> Option<(Pa
         "--no-progress".into(),
         "--skip-download".into(),
         "--write-subs".into(),
-        // Exact codes: `fr.*` matches sixty variants and yt-dlp tries them all.
         "--sub-langs".into(),
-        "fr,en".into(),
+        langs.into(),
         // Its own retries handle a throttled request without losing the run.
         "--retries".into(),
         "5".into(),
@@ -131,6 +149,8 @@ async fn fetch_subtitles(db: &Db, id: &str, url: &str, auto: bool) -> Option<(Pa
         "exp=2:60".into(),
         "--convert-subs".into(),
         "vtt".into(),
+        // `--print` puts yt-dlp in simulation mode, where it writes nothing.
+        "--no-simulate".into(),
         "--print".into(),
         "title".into(),
         "-o".into(),
@@ -138,6 +158,9 @@ async fn fetch_subtitles(db: &Db, id: &str, url: &str, auto: bool) -> Option<(Pa
     ];
     if auto {
         args.push("--write-auto-subs".into());
+        // Without this, asking for machine captions also pulls the written
+        // ones, and the first pass already established there are none.
+        args.push("--no-write-subs".into());
     }
     args.push("--".into());
     args.push(url.into());
