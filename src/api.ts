@@ -32,6 +32,7 @@ export const initial: Snapshot = {
     local_api: false,
     local_api_port: 8787,
     local_api_token: "",
+    interface_language: "en",
     auto_subtitles: false,
     watch_in_background: false,
     ingest_in_background: false,

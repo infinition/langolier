@@ -60,6 +60,9 @@ pub struct Settings {
     /// author wrote. Faster, but they carry no punctuation, which cuts poorly
     /// into passages.
     pub auto_subtitles: bool,
+    /// Interface language, "en" or "fr". The window keeps its own copy in the
+    /// browser; this one exists so native menus can be written in it too.
+    pub interface_language: String,
     /// Watch scan interval, in seconds.
     pub watch_interval: u64,
     /// Active assistant profile; empty means bare Langolier.
@@ -111,6 +114,7 @@ impl Default for Settings {
             local_api: false,
             local_api_port: 8787,
             local_api_token: String::new(),
+            interface_language: "en".into(),
             auto_subtitles: false,
             watch_in_background: false,
             ingest_in_background: false,

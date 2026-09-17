@@ -96,7 +96,12 @@ function LangSwitch() {
           key={l}
           className={l === lang ? "on" : ""}
           aria-pressed={l === lang}
-          onClick={() => setLang(l)}
+          onClick={() => {
+            setLang(l);
+            // Native menus live outside the interface's translations and
+            // have to be told; failing is harmless, they stay as they were.
+            if (desktop) void api("set_interface_language", { lang: l }).catch(() => {});
+          }}
         >
           {l.toUpperCase()}
         </button>

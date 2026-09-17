@@ -57,7 +57,7 @@ fn enter_background(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
-fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
+fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
     let slot = app.state::<Tray>();
     let mut slot = slot.0.lock().map_err(|_| "tray")?;
@@ -68,13 +68,20 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
     if slot.is_some() {
         return Ok(());
     }
-    let open = MenuItemBuilder::with_id("open", "Open Langolier")
+    // A native menu is out of reach of the interface's own translations, so it
+    // carries the few words it needs.
+    let (open_label, ask_label, quit_label) = if french {
+        ("Ouvrir Langolier", "Poser une question", "Quitter")
+    } else {
+        ("Open Langolier", "Ask a question", "Quit")
+    };
+    let open = MenuItemBuilder::with_id("open", open_label)
         .build(app)
         .map_err(err)?;
-    let ask = MenuItemBuilder::with_id("ask", "Ask a question")
+    let ask = MenuItemBuilder::with_id("ask", ask_label)
         .build(app)
         .map_err(err)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit")
+    let quit = MenuItemBuilder::with_id("quit", quit_label)
         .build(app)
         .map_err(err)?;
     let menu = MenuBuilder::new(app)
@@ -157,7 +164,11 @@ fn save_settings(app: tauri::AppHandle, state: State<AppState>, settings: Settin
     }
     crate::llm::chat_endpoint(&settings)?;
     crate::engine::set_idle_secs(settings.engine_idle_minutes * 60);
-    apply_tray(&app, settings.tray_icon || settings.start_hidden)?;
+    apply_tray(
+        &app,
+        settings.tray_icon || settings.start_hidden,
+        settings.interface_language.starts_with("fr"),
+    )?;
     if let Err(e) = apply_autostart(&app, settings.launch_at_login) {
         eprintln!("Launch at login: {e}");
     }
@@ -241,6 +252,23 @@ fn apply_local_api(state: &State<AppState>, s: &Settings) -> Res<()> {
         *slot = Some(stop)
     }
     println!("Local API: http://127.0.0.1:{started}/api/ask");
+    Ok(())
+}
+/// The window switched language: the native menu is rebuilt in it.
+#[tauri::command]
+fn set_interface_language(app: tauri::AppHandle, state: State<AppState>, lang: String) -> Res<()> {
+    let lang = if lang.starts_with("fr") { "fr" } else { "en" };
+    let mut s = state.db.settings()?;
+    if s.interface_language == lang {
+        return Ok(());
+    }
+    s.interface_language = lang.into();
+    state.db.set_settings(&s)?;
+    if s.tray_icon || s.start_hidden {
+        // Dropping it and building it again is the only way to relabel it.
+        apply_tray(&app, false, false)?;
+        apply_tray(&app, true, lang == "fr")?;
+    }
     Ok(())
 }
 /// Opens a link in the real browser. A target="_blank" inside the webview
@@ -698,7 +726,11 @@ pub fn run() {
             // The main window is built here, not in tauri.conf.
             build_main(app.handle(), !hidden).map_err(std::io::Error::other)?;
             app.manage(Tray(std::sync::Mutex::new(None)));
-            if let Err(e) = apply_tray(app.handle(), s.tray_icon || hidden) {
+            if let Err(e) = apply_tray(
+                app.handle(),
+                s.tray_icon || hidden,
+                s.interface_language.starts_with("fr"),
+            ) {
                 eprintln!("Tray: {e}");
             }
             if let Err(e) = apply_autostart(app.handle(), s.launch_at_login) {
@@ -767,6 +799,7 @@ pub fn run() {
             crate::cmd_assistants::telegram_check,
             embedding_ready,
             open_link,
+            set_interface_language,
             new_local_token,
             test_local_api,
             crate::cmd_assistants::save_assistant,
