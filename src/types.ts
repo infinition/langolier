@@ -70,6 +70,8 @@ export interface EmbedModel {
   label: string;
   dims: number;
   gguf_file: string;
+  /// Whether its GGUF is already in the cache.
+  installed: boolean;
 }
 export const THEMES: {
   id: string;

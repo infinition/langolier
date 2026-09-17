@@ -53,6 +53,9 @@ export const FR: Record<string, string> = {
   "The website": "Le site",
   "The source code": "Le code source",
   "Support the project": "Soutenir le projet",
+  "This model is not downloaded yet, so nothing can be vectorised. Word search keeps working meanwhile.":
+    "Ce modèle n'est pas encore téléchargé : rien ne peut être vectorisé. La recherche par mots continue de fonctionner.",
+  "Install it": "L'installer",
   "Built-in embedding engine": "Moteur d'embeddings intégré",
   "The GGUF runs inside Langolier, with nothing to start beside it. Uncheck to use a server of your own.":
     "Le GGUF tourne dans Langolier, sans rien à lancer à côté. Décochez pour utiliser votre propre serveur.",

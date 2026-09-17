@@ -373,6 +373,40 @@ export default function EngineSettings({
               )}
             </small>
           </label>
+          {s.embedding_endpoint.trim() === "embedded" &&
+            embedModels.length > 0 &&
+            (() => {
+              const picked = embedModels.find(
+                (m) => m.tag === s.embedding_model.trim(),
+              );
+              // A path to a GGUF is the user's business; only curated tags
+              // can be checked and installed from here.
+              if (!picked || picked.installed) return null;
+              return (
+                <div className="setting-note">
+                  <CircleAlert size={16} />
+                  <p>
+                    {t(
+                      "This model is not downloaded yet, so nothing can be vectorised. Word search keeps working meanwhile.",
+                    )}{" "}
+                    <Button
+                      disabled={pulling}
+                      onClick={() => {
+                        setModel(picked.tag);
+                        void pull();
+                      }}
+                    >
+                      {pulling ? (
+                        <LoaderCircle className="spin" size={14} />
+                      ) : (
+                        <Download size={14} />
+                      )}{" "}
+                      {t("Install it")}
+                    </Button>
+                  </p>
+                </div>
+              );
+            })()}
           {s.embedding_endpoint.trim() !== "embedded" && (
             <label>
               {t("Embedding server address")}

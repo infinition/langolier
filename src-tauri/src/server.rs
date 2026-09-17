@@ -1226,9 +1226,26 @@ async fn search_only(
                            "text": src.text, "doc_id": src.doc_id, "score": src.score})
                 })
                 .collect();
+            // Same courtesy as /api/ask: one field a shortcut can read without
+            // walking the array. Here it holds the passages themselves, since
+            // nothing wrote an answer over them.
+            let text = sources
+                .iter()
+                .map(|s| {
+                    let name = s["name"].as_str().unwrap_or("?");
+                    let locator = s["locator"].as_str().unwrap_or_default();
+                    let head = if locator.is_empty() {
+                        format!("[{}] {name}", s["n"])
+                    } else {
+                        format!("[{}] {name}, {locator}", s["n"])
+                    };
+                    format!("{head}\n{}", s["text"].as_str().unwrap_or_default().trim())
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
             json_ok(
                 w,
-                json!({"question": question, "mode": mode,
+                json!({"question": question, "mode": mode, "text": text,
                               "sources": sources, "warning": warning}),
             )
             .await

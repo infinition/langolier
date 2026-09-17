@@ -502,8 +502,26 @@ fn base64_encode(bytes: &[u8]) -> String {
 fn embed_models() -> Vec<Value> {
     crate::llm::EMBED_MODELS
         .iter()
-        .map(|m| json!({"tag": m.tag, "label": m.label, "dims": m.dims, "gguf_file": m.gguf_file}))
+        .map(|m| {
+            json!({"tag": m.tag, "label": m.label, "dims": m.dims,
+                        "gguf_file": m.gguf_file,
+                        "installed": crate::engine::available(m.tag)})
+        })
         .collect()
+}
+/// Whether the embedding model is ready to answer. A missing GGUF is worth
+/// saying before a source is queued against it, not after.
+#[tauri::command]
+fn embedding_ready(state: State<AppState>) -> Res<Value> {
+    let s = state.db.settings()?;
+    if s.embedding_endpoint.trim() != crate::llm::EMBEDDED {
+        return Ok(json!({"embedded": false, "ready": true, "model": s.embedding_model}));
+    }
+    Ok(json!({
+        "embedded": true,
+        "ready": crate::engine::available(&s.embedding_model),
+        "model": s.embedding_model,
+    }))
 }
 #[tauri::command]
 fn export_data(state: State<AppState>, path: String, kind: String) -> Res<Value> {
@@ -747,6 +765,7 @@ pub fn run() {
             crate::cmd_assistants::delete_api_key,
             crate::cmd_assistants::use_api_key,
             crate::cmd_assistants::telegram_check,
+            embedding_ready,
             open_link,
             new_local_token,
             test_local_api,
