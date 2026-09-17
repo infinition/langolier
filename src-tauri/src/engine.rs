@@ -428,6 +428,72 @@ fn run_embed(w: &mut Worker, path: &Path, texts: &[String]) -> Res<Vec<Vec<f32>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Compares what this engine produces against the vectors already stored,
+    /// to say whether relabelling a library is safe or whether it has to be
+    /// indexed again.
+    /// LANGOLIER_COMPARE_DB=/path/langolier.sqlite3 LANGOLIER_GGUF_EMBED=/path/model.gguf \
+    ///   cargo test compare_stored -- --ignored --nocapture
+    #[test]
+    #[ignore = "Needs a populated library and the embedding model"]
+    fn compare_stored() {
+        let Ok(db) = std::env::var("LANGOLIER_COMPARE_DB") else {
+            return;
+        };
+        let emb = std::env::var("LANGOLIER_GGUF_EMBED").expect("LANGOLIER_GGUF_EMBED");
+        let key = std::env::var("LANGOLIER_COMPARE_KEY")
+            .unwrap_or_else(|_| "http://127.0.0.1:11434|embeddinggemma".to_string());
+        let conn = rusqlite::Connection::open_with_flags(
+            &db,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+        )
+        .unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT text, embedding FROM chunks \
+                 WHERE embedding IS NOT NULL AND embedding_model = ?1 \
+                 AND length(text) BETWEEN 200 AND 1200 \
+                 ORDER BY id LIMIT 24",
+            )
+            .unwrap();
+        let rows: Vec<(String, Vec<u8>)> = stmt
+            .query_map([&key], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(!rows.is_empty(), "no passage carries the key {key}");
+        let texts: Vec<String> = rows.iter().map(|(t, _)| t.clone()).collect();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fresh = rt.block_on(embed(&emb, &texts)).unwrap();
+        let mut scores = Vec::with_capacity(rows.len());
+        for ((_, blob), got) in rows.iter().zip(&fresh) {
+            let (whole, _) = blob.as_chunks::<4>();
+            let stored: Vec<f32> = whole.iter().copied().map(f32::from_le_bytes).collect();
+            assert_eq!(stored.len(), got.len(), "dimensions differ");
+            let dot: f32 = stored.iter().zip(got).map(|(a, b)| a * b).sum();
+            let ns: f32 = stored.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let ng: f32 = got.iter().map(|x| x * x).sum::<f32>().sqrt();
+            scores.push(dot / (ns * ng));
+        }
+        scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mean = scores.iter().sum::<f32>() / scores.len() as f32;
+        println!(
+            "COMPARE {} passages | min {:.4} | median {:.4} | mean {:.4} | max {:.4}",
+            scores.len(),
+            scores[0],
+            scores[scores.len() / 2],
+            mean,
+            scores[scores.len() - 1]
+        );
+        // A different engine on the same passage lands far below this.
+        println!(
+            "VERDICT {}",
+            if scores[0] > 0.99 {
+                "relabelling is safe"
+            } else {
+                "index again"
+            }
+        );
+    }
     #[test]
     #[ignore = "Charge de vrais modeles ; cargo test engine -- --ignored --nocapture"]
     fn embed_and_generate() {

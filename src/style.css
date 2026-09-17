@@ -2948,14 +2948,19 @@ html.palette-mode #root {
   color: rgba(241, 241, 242, 0.42);
 }
 .palette-icon {
-  color: var(--lime);
-  animation: shimmer 2.4s infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* The box stays the size of the bar; the creature spills out of it. */
+  width: 38px;
+  height: 38px;
 }
-@keyframes shimmer {
-  50% {
-    opacity: 0.55;
-    transform: rotate(8deg) scale(1.08);
-  }
+.palette-icon .logo-symbol.small {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  margin: -8px;
 }
 .palette-hint {
   color: rgba(241, 241, 242, 0.42);
@@ -3988,15 +3993,14 @@ mark.current {
 }
 
 .langolier:focus-visible {
-  filter: drop-shadow(0 0 0.8rem rgba(105, 160, 255, .75));
+  filter: drop-shadow(0 0 0.8rem rgba(105, 160, 255, 0.75));
 }
 
 .langolier__body {
   position: absolute;
   inset: 0;
   transform-origin: 50% 64%;
-  transform:
-    translate3d(
+  transform: translate3d(
       calc(var(--idle-x) + var(--pointer-x) * 7px),
       calc(var(--idle-y) + var(--pointer-y) * 5px - var(--breath) * 8px),
       0
@@ -4017,9 +4021,8 @@ mark.current {
   object-fit: contain;
   pointer-events: none;
   transform-origin: 50% 64%;
-  filter:
-    drop-shadow(0 24px 34px rgba(0, 0, 0, .38))
-    brightness(calc(1 + var(--pulse) * .018));
+  filter: drop-shadow(0 24px 34px rgba(0, 0, 0, 0.38))
+    brightness(calc(1 + var(--pulse) * 0.018));
   transition: filter 160ms ease;
 }
 
@@ -4032,13 +4035,12 @@ mark.current {
   bottom: -2%;
   height: 10%;
   border-radius: 50%;
-  background: rgba(0, 0, 0, .48);
+  background: rgba(0, 0, 0, 0.48);
   filter: blur(22px);
-  opacity: calc(.62 - var(--breath) * .09);
-  transform:
-    translate3d(calc(var(--pointer-x) * -4px), 0, -20px)
-    scaleX(calc(1 - var(--breath) * .035))
-    scaleY(calc(.86 - var(--breath) * .025));
+  opacity: calc(0.62 - var(--breath) * 0.09);
+  transform: translate3d(calc(var(--pointer-x) * -4px), 0, -20px)
+    scaleX(calc(1 - var(--breath) * 0.035))
+    scaleY(calc(0.86 - var(--breath) * 0.025));
   will-change: transform, opacity;
 }
 
@@ -4049,28 +4051,26 @@ mark.current {
   width: 10%;
   aspect-ratio: 1.1;
   border-radius: 50%;
-  opacity: calc(.10 + var(--pulse) * .15 + var(--hover) * .08);
-  background:
-    radial-gradient(
-      ellipse at 50% 50%,
-      rgba(118, 193, 255, .40) 0%,
-      rgba(48, 120, 255, .12) 38%,
-      transparent 70%
-    );
+  opacity: calc(0.1 + var(--pulse) * 0.15 + var(--hover) * 0.08);
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(118, 193, 255, 0.4) 0%,
+    rgba(48, 120, 255, 0.12) 38%,
+    transparent 70%
+  );
   filter: blur(9px);
   mix-blend-mode: screen;
   pointer-events: none;
-  transform:
-    translate3d(
+  transform: translate3d(
       calc(var(--pointer-x) * 2.5px),
       calc(var(--pointer-y) * 2px),
       8px
     )
-    scale(calc(1 + var(--pulse) * .05));
+    scale(calc(1 + var(--pulse) * 0.05));
 }
 
 .eye-glow--left {
-  left: 26.0%;
+  left: 26%;
   top: 7.8%;
 }
 
@@ -4090,17 +4090,14 @@ mark.current {
   height: 48.5%;
   border-radius: 47% 48% 50% 50%;
   pointer-events: none;
-  opacity: calc(.10 + var(--breath) * .025);
-  background:
-    radial-gradient(
-      ellipse at 50% 44%,
-      rgba(0, 0, 0, 0) 0%,
-      rgba(0, 0, 0, .16) 58%,
-      rgba(0, 0, 0, .36) 100%
-    );
+  opacity: calc(0.1 + var(--breath) * 0.025);
+  background: radial-gradient(
+    ellipse at 50% 44%,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.16) 58%,
+    rgba(0, 0, 0, 0.36) 100%
+  );
 }
-
-
 
 /* =========================================================
    DOCUMENT INGESTION
@@ -4124,16 +4121,19 @@ mark.current {
   /* Proportional to the creature, whatever size the host gives it. */
   width: 7.2%;
   min-width: 7px;
-  aspect-ratio: .76;
+  aspect-ratio: 0.76;
   border-radius: 4px;
   overflow: hidden;
-  background:
-    linear-gradient(145deg, rgba(255,255,255,.98), rgba(215,239,255,.96));
-  border: 1px solid rgba(135, 211, 255, .68);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(215, 239, 255, 0.96)
+  );
+  border: 1px solid rgba(135, 211, 255, 0.68);
   box-shadow:
-    0 0 10px rgba(84, 190, 255, .80),
-    0 0 28px rgba(25, 104, 255, .32),
-    0 4px 14px rgba(0, 0, 0, .22);
+    0 0 10px rgba(84, 190, 255, 0.8),
+    0 0 28px rgba(25, 104, 255, 0.32),
+    0 4px 14px rgba(0, 0, 0, 0.22);
   transform-origin: center;
   will-change: transform, opacity, filter;
   backface-visibility: hidden;
@@ -4147,11 +4147,11 @@ mark.current {
   top: 22%;
   height: 6%;
   border-radius: 999px;
-  background: rgba(73, 118, 150, .70);
+  background: rgba(73, 118, 150, 0.7);
   box-shadow:
-    0 8px 0 rgba(73, 118, 150, .62),
-    0 16px 0 rgba(73, 118, 150, .58),
-    0 24px 0 rgba(73, 118, 150, .50);
+    0 8px 0 rgba(73, 118, 150, 0.62),
+    0 16px 0 rgba(73, 118, 150, 0.58),
+    0 24px 0 rgba(73, 118, 150, 0.5);
 }
 
 .flying-doc::after {
@@ -4161,12 +4161,13 @@ mark.current {
   top: -1px;
   width: 32%;
   aspect-ratio: 1;
-  background:
-    linear-gradient(225deg,
-      rgba(166,218,255,.78) 0 48%,
-      rgba(255,255,255,.98) 49% 100%);
+  background: linear-gradient(
+    225deg,
+    rgba(166, 218, 255, 0.78) 0 48%,
+    rgba(255, 255, 255, 0.98) 49% 100%
+  );
   clip-path: polygon(0 0, 100% 100%, 0 100%);
-  opacity: .88;
+  opacity: 0.88;
 }
 
 .knowledge-bit {
@@ -4177,8 +4178,8 @@ mark.current {
   border-radius: 1px;
   background: #66d3ff;
   box-shadow:
-    0 0 7px rgba(101, 211, 255, .95),
-    0 0 16px rgba(44, 116, 255, .80);
+    0 0 7px rgba(101, 211, 255, 0.95),
+    0 0 16px rgba(44, 116, 255, 0.8);
   will-change: transform, opacity;
 }
 
@@ -4189,14 +4190,15 @@ mark.current {
   width: 11%;
   aspect-ratio: 1;
   border-radius: 50%;
-  transform: translate(-50%, -50%) scale(.15);
+  transform: translate(-50%, -50%) scale(0.15);
   opacity: 0;
-  background:
-    radial-gradient(circle,
-      rgba(235,249,255,.90) 0 7%,
-      rgba(88,190,255,.42) 18%,
-      rgba(27,93,255,.16) 38%,
-      transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(235, 249, 255, 0.9) 0 7%,
+    rgba(88, 190, 255, 0.42) 18%,
+    rgba(27, 93, 255, 0.16) 38%,
+    transparent 70%
+  );
   filter: blur(3px);
   mix-blend-mode: screen;
   pointer-events: none;
@@ -4208,15 +4210,27 @@ mark.current {
 }
 
 @keyframes ingest-flash {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.12); }
-  28%  { opacity: .62; transform: translate(-50%, -50%) scale(1); }
-  56%  { opacity: .28; transform: translate(-50%, -50%) scale(.72); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(.18); }
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.12);
+  }
+  28% {
+    opacity: 0.62;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  56% {
+    opacity: 0.28;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.18);
+  }
 }
 
 /* Petit "chomp" tactile au clic. */
 .langolier.is-reacting .langolier__body {
-  animation: chomp 620ms cubic-bezier(.19, .8, .25, 1);
+  animation: chomp 620ms cubic-bezier(0.19, 0.8, 0.25, 1);
 }
 
 .langolier.is-reacting .eye-glow {
@@ -4224,16 +4238,36 @@ mark.current {
 }
 
 @keyframes chomp {
-  0%   { transform: translate3d(0,0,0) scale(1) rotate(0); }
-  16%  { transform: translate3d(0,7px,18px) scaleX(1.055) scaleY(.93) rotate(-1deg); }
-  34%  { transform: translate3d(0,-15px,44px) scaleX(.975) scaleY(1.075) rotate(1.2deg); }
-  56%  { transform: translate3d(0,5px,20px) scaleX(1.02) scaleY(.975) rotate(-.45deg); }
-  100% { transform: translate3d(0,0,0) scale(1) rotate(0); }
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  }
+  16% {
+    transform: translate3d(0, 7px, 18px) scaleX(1.055) scaleY(0.93)
+      rotate(-1deg);
+  }
+  34% {
+    transform: translate3d(0, -15px, 44px) scaleX(0.975) scaleY(1.075)
+      rotate(1.2deg);
+  }
+  56% {
+    transform: translate3d(0, 5px, 20px) scaleX(1.02) scaleY(0.975)
+      rotate(-0.45deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  }
 }
 
 @keyframes eye-pop {
-  0%, 100% { opacity: .18; transform: scale(1); }
-  34%      { opacity: .55; transform: scale(1.16); }
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: scale(1);
+  }
+  34% {
+    opacity: 0.55;
+    transform: scale(1.16);
+  }
 }
 
 /* Réduction propre des animations pour l'accessibilité. */

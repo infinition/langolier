@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
-import { CopyButton } from "../components/Common";
+import { CopyButton, Logo } from "../components/Common";
 import { listen } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Sparkles, LoaderCircle, CornerDownLeft } from "lucide-react";
+import { LoaderCircle, CornerDownLeft } from "lucide-react";
 import { api, errorText } from "../api";
 import type { Source } from "../types";
 
@@ -141,7 +141,9 @@ export default function Palette() {
           void ask();
         }}
       >
-        <Sparkles size={20} className="palette-icon" />
+        <span className="palette-icon">
+          <Logo small interactive busy={busy} />
+        </span>
         <input
           ref={input}
           value={question}

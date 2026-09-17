@@ -12,6 +12,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 /// The tray icon lives here so a settings change can create or drop it.
 struct Tray(std::sync::Mutex<Option<tauri::tray::TrayIcon>>);
+/// macOS opens the menu itself, so it has to be kept to be opened by hand.
+struct TrayMenu(std::sync::Mutex<Option<tauri::menu::Menu<tauri::Wry>>>);
 /// Builds the window Langolier works in. Called at start, and again whenever
 /// the app comes back from the menu bar.
 fn build_main(app: &tauri::AppHandle, visible: bool) -> Res<()> {
@@ -77,6 +79,9 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
         // second icon appears next to the first when one is built again.
         app.remove_tray_by_id(TRAY_ID);
         *slot = None;
+        if let Ok(mut kept) = app.state::<TrayMenu>().0.lock() {
+            *kept = None;
+        }
         return Ok(());
     }
     if slot.is_some() {
@@ -104,18 +109,38 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
         .item(&quit)
         .build()
         .map_err(err)?;
-    let mut builder = tauri::tray::TrayIconBuilder::with_id(TRAY_ID)
-        .menu(&menu)
+    // A status item that carries a menu is handed to AppKit: macOS opens the
+    // menu on either button and the application never sees the click, so the
+    // left one could never reach the palette. The menu is left off the icon
+    // there and opened by hand below it. Windows and Linux do leave the click
+    // to us, and keep the menu the system draws.
+    let builder = tauri::tray::TrayIconBuilder::with_id(TRAY_ID);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.menu(&menu).show_menu_on_left_click(false);
+    let mut builder = builder
         // Left click asks a question, right click opens the menu.
-        .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
-            if let tauri::tray::TrayIconEvent::Click {
-                button: tauri::tray::MouseButton::Left,
-                button_state: tauri::tray::MouseButtonState::Up,
+            let tauri::tray::TrayIconEvent::Click {
+                button,
+                button_state,
+                rect,
                 ..
             } = event
-            {
-                toggle_palette(tray.app_handle())
+            else {
+                return;
+            };
+            // Only macOS reads it, and only to place the menu it opens itself.
+            #[cfg(not(target_os = "macos"))]
+            let _ = rect;
+            match (button, button_state) {
+                (tauri::tray::MouseButton::Left, tauri::tray::MouseButtonState::Up) => {
+                    toggle_palette(tray.app_handle())
+                }
+                #[cfg(target_os = "macos")]
+                (tauri::tray::MouseButton::Right, tauri::tray::MouseButtonState::Down) => {
+                    popup_tray_menu(tray.app_handle(), rect)
+                }
+                _ => {}
             }
         })
         .tooltip("Langolier")
@@ -144,7 +169,65 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool, french: bool) -> Res<()> {
         builder = builder.icon(icon.clone());
     }
     *slot = Some(builder.build(app).map_err(err)?);
+    if let Ok(mut kept) = app.state::<TrayMenu>().0.lock() {
+        *kept = Some(menu);
+    }
     Ok(())
+}
+#[cfg(target_os = "macos")]
+const ANCHOR: &str = "tray-anchor";
+/// Opens the tray menu below the icon. The system places a menu against a
+/// window, so an empty one waits at the icon for as long as the menu is up.
+#[cfg(target_os = "macos")]
+fn popup_tray_menu(app: &tauri::AppHandle, rect: tauri::Rect) {
+    use tauri::menu::ContextMenu;
+    let Some(menu) = app
+        .state::<TrayMenu>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|kept| kept.clone())
+    else {
+        return;
+    };
+    let anchor = match app.get_webview_window(ANCHOR) {
+        Some(w) => w,
+        None => match tauri::WebviewWindowBuilder::new(
+            app,
+            ANCHOR,
+            tauri::WebviewUrl::App("anchor.html".into()),
+        )
+        .title("Langolier")
+        .inner_size(1.0, 1.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .focused(false)
+        .visible(false)
+        .build()
+        {
+            Ok(w) => w,
+            Err(e) => return eprintln!("Tray menu: {e}"),
+        },
+    };
+    let scale = anchor.scale_factor().unwrap_or(1.0);
+    let at = rect.position.to_logical::<f64>(scale);
+    let size = rect.size.to_logical::<f64>(scale);
+    let _ = anchor.set_position(tauri::LogicalPosition::new(at.x, at.y + size.height));
+    let _ = anchor.show();
+    // A menu whose window is not the key one is dismissed after a moment.
+    let _ = anchor.set_focus();
+    let done = anchor.clone();
+    // popup_at hands its work to the main thread and waits for the answer,
+    // and this handler already runs there: asking from here would wait on
+    // itself. The wait ends when the menu closes, which is when to hide.
+    let window = anchor.as_ref().window();
+    std::thread::spawn(move || {
+        let _ = menu.popup_at(window, tauri::LogicalPosition::new(0.0, 0.0));
+        let _ = done.hide();
+    });
 }
 fn apply_autostart(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
     let al = app.autolaunch();
@@ -741,6 +824,7 @@ pub fn run() {
             // The main window is built here, not in tauri.conf.
             build_main(app.handle(), !hidden).map_err(std::io::Error::other)?;
             app.manage(Tray(std::sync::Mutex::new(None)));
+            app.manage(TrayMenu(std::sync::Mutex::new(None)));
             if let Err(e) = apply_tray(
                 app.handle(),
                 s.tray_icon || hidden,
