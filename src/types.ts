@@ -29,6 +29,8 @@ export interface Settings {
   local_api: boolean;
   local_api_port: number;
   local_api_token: string;
+  watch_in_background: boolean;
+  ingest_in_background: boolean;
   watch_interval: number;
   active_assistant: string;
   ingestion_paused: boolean;

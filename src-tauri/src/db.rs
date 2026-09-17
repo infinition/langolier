@@ -51,6 +51,11 @@ pub struct Settings {
     pub local_api_port: u16,
     /// Bearer token, generated when the API is first switched on.
     pub local_api_token: String,
+    /// Keep scanning watched folders while Langolier sits in the menu bar.
+    /// Off by default: a folder filled in the meantime waits for the window.
+    pub watch_in_background: bool,
+    /// Keep turning documents into passages and vectors while in the menu bar.
+    pub ingest_in_background: bool,
     /// Watch scan interval, in seconds.
     pub watch_interval: u64,
     /// Active assistant profile; empty means bare Langolier.
@@ -102,6 +107,8 @@ impl Default for Settings {
             local_api: false,
             local_api_port: 8787,
             local_api_token: String::new(),
+            watch_in_background: false,
+            ingest_in_background: false,
             watch_interval: 30,
             active_assistant: String::new(),
             ingestion_paused: false,
@@ -111,6 +118,13 @@ impl Default for Settings {
             launch_at_login: false,
         }
     }
+}
+/// Set by the desktop app while it runs from the menu bar with no window.
+/// Standalone servers never set it, so their workers keep going.
+pub static BACKGROUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether a worker should stand down right now.
+pub fn dormant(allowed_in_background: bool) -> bool {
+    !allowed_in_background && BACKGROUND.load(std::sync::atomic::Ordering::Relaxed)
 }
 /// Live pools, by data directory. Windows refuses to replace a file that is
 /// still open, so replacing the database has to close the pooled connections

@@ -369,7 +369,13 @@ pub fn scan(db: &Db, id: &str) -> Res<Value> {
 /// Scan loop.
 pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {
     loop {
-        let interval = db.settings().map(|s| s.watch_interval.max(5)).unwrap_or(30) as i64;
+        let settings = db.settings().ok();
+        // Scanning folders wakes the disk; it waits while the window is away.
+        if crate::db::dormant(settings.as_ref().is_some_and(|s| s.watch_in_background)) {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+        let interval = settings.map(|s| s.watch_interval.max(5)).unwrap_or(30) as i64;
         let due: Vec<String> = db
             .conn()
             .and_then(|c| {

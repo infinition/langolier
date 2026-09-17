@@ -685,6 +685,45 @@ export default function EngineSettings({
               )}
             </small>
           </label>
+          {s.tray_icon && (
+            <>
+              <p className="field-help">
+                {t(
+                  "Closing the window leaves Langolier in the menu bar, out of the Dock: the interface is released and about 240 MB with it. Click the icon to ask a question, right click for the menu. The local API keeps answering.",
+                )}
+              </p>
+              <label className="check inline-check">
+                <input
+                  type="checkbox"
+                  checked={s.watch_in_background}
+                  onChange={(e) =>
+                    field("watch_in_background", e.target.checked)
+                  }
+                />
+                {t("Keep watching folders in the menu bar")}
+                <small>
+                  {t(
+                    "Off: a watched folder filled while Langolier sits in the menu bar is only picked up when you open the window again.",
+                  )}
+                </small>
+              </label>
+              <label className="check inline-check">
+                <input
+                  type="checkbox"
+                  checked={s.ingest_in_background}
+                  onChange={(e) =>
+                    field("ingest_in_background", e.target.checked)
+                  }
+                />
+                {t("Keep processing sources in the menu bar")}
+                <small>
+                  {t(
+                    "Off: queued sources wait. OCR, transcription and vectors are what heat the machine.",
+                  )}
+                </small>
+              </label>
+            </>
+          )}
         </section>
         <section className="panel form-stack">
           <div className="panel-heading">

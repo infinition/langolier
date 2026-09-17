@@ -32,6 +32,8 @@ export const initial: Snapshot = {
     local_api: false,
     local_api_port: 8787,
     local_api_token: "",
+    watch_in_background: false,
+    ingest_in_background: false,
     watch_interval: 30,
     active_assistant: "",
     ingestion_paused: false,

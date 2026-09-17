@@ -51,6 +51,16 @@ export const FR: Record<string, string> = {
     "Chaque source devient un point de départ. Votre mémoire grandit avec vous.",
   Send: "Envoyer",
   "Local API": "API locale",
+  "Closing the window leaves Langolier in the menu bar, out of the Dock: the interface is released and about 240 MB with it. Click the icon to ask a question, right click for the menu. The local API keeps answering.":
+    "Fermer la fenêtre laisse Langolier dans la barre des menus, hors du Dock : l'interface est libérée, et environ 240 Mo avec elle. Cliquez l'icône pour poser une question, clic droit pour le menu. L'API locale continue de répondre.",
+  "Keep watching folders in the menu bar":
+    "Continuer à surveiller les dossiers dans la barre des menus",
+  "Off: a watched folder filled while Langolier sits in the menu bar is only picked up when you open the window again.":
+    "Désactivé : un dossier surveillé qui se remplit pendant que Langolier est dans la barre des menus n'est repris qu'à la réouverture de la fenêtre.",
+  "Keep processing sources in the menu bar":
+    "Continuer à traiter les sources dans la barre des menus",
+  "Off: queued sources wait. OCR, transcription and vectors are what heat the machine.":
+    "Désactivé : les sources en file attendent. L'OCR, la transcription et les vecteurs sont ce qui chauffe la machine.",
   "Let Shortcuts, Siri and local apps query your Langolier memory.":
     "Autorisez Raccourcis, Siri et les applications locales à interroger votre mémoire Langolier.",
   "Answer local requests": "Répondre aux requêtes locales",

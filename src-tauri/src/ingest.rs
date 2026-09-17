@@ -699,7 +699,12 @@ pub(crate) async fn process(db: &Db, id: &str, source: &str, kind: &str, name: &
 }
 pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {
     loop {
-        if db.settings().map(|s| s.ingestion_paused).unwrap_or(false) {
+        let settings = db.settings().ok();
+        // OCR, transcription and embeddings are the expensive part: they wait
+        // while Langolier sits in the menu bar, unless told otherwise.
+        if settings.as_ref().is_some_and(|s| s.ingestion_paused)
+            || crate::db::dormant(settings.is_some_and(|s| s.ingest_in_background))
+        {
             tokio::time::sleep(Duration::from_secs(2)).await;
             continue;
         }

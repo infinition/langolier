@@ -2,19 +2,60 @@
 use crate::db::{err, Db, Res, Settings};
 use rusqlite::params;
 use serde_json::{json, Value};
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 /// The tray icon lives here so a settings change can create or drop it.
 struct Tray(std::sync::Mutex<Option<tauri::tray::TrayIcon>>);
+/// Builds the window Langolier works in. Called at start, and again whenever
+/// the app comes back from the menu bar.
+fn build_main(app: &tauri::AppHandle, visible: bool) -> Res<()> {
+    tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+        .title("Langolier")
+        .inner_size(1440.0, 940.0)
+        .min_inner_size(800.0, 600.0)
+        .background_color(tauri::window::Color(0x11, 0x12, 0x11, 0xff))
+        .visible(visible)
+        .build()
+        .map_err(err)?;
+    set_dock_icon(ICON_PNG);
+    Ok(())
+}
 fn show_main(app: &tauri::AppHandle) {
+    leave_background(app);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+    } else if let Err(e) = build_main(app, true) {
+        eprintln!("Window: {e}")
     }
+}
+/// Leaves the menu bar: the app takes its place in the Dock again and the
+/// paused workers pick up where they left off.
+fn leave_background(app: &tauri::AppHandle) {
+    if !crate::db::BACKGROUND.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    let _ = app;
+}
+/// Drops the window and steps out of the Dock: what is left is the menu bar
+/// icon, the palette, and the local API. The rendering engine is what costs
+/// memory here, so the window is destroyed rather than hidden.
+fn enter_background(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.destroy();
+    }
+    crate::db::BACKGROUND.store(true, Ordering::SeqCst);
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
 fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -30,7 +71,7 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
     let open = MenuItemBuilder::with_id("open", "Open Langolier")
         .build(app)
         .map_err(err)?;
-    let ask = MenuItemBuilder::with_id("ask", "Ask")
+    let ask = MenuItemBuilder::with_id("ask", "Ask a question")
         .build(app)
         .map_err(err)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit")
@@ -44,7 +85,18 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
         .map_err(err)?;
     let mut builder = tauri::tray::TrayIconBuilder::with_id("langolier")
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        // Left click asks a question, right click opens the menu.
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                toggle_palette(tray.app_handle())
+            }
+        })
         .tooltip("Langolier")
         .on_menu_event(|app, e| match e.id().as_ref() {
             "open" => show_main(app),
@@ -55,8 +107,19 @@ fn apply_tray(app: &tauri::AppHandle, enabled: bool) -> Res<()> {
             }
             _ => {}
         });
+    // macOS wants a template image: black on transparency, recoloured by the
+    // system for light, dark and selected. Windows and Linux take the app icon
+    // in colour, which is what their trays expect.
+    #[cfg(target_os = "macos")]
+    {
+        match tauri::image::Image::from_bytes(TRAY_TEMPLATE_PNG) {
+            Ok(icon) => builder = builder.icon(icon).icon_as_template(true),
+            Err(e) => eprintln!("Tray icon: {e}"),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone()).icon_as_template(false);
+        builder = builder.icon(icon.clone());
     }
     *slot = Some(builder.build(app).map_err(err)?);
     Ok(())
@@ -572,7 +635,12 @@ pub fn run() {
                     .lock()
                     .map(|t| t.is_some())
                     .unwrap_or(false);
-                if cfg!(target_os = "macos") || tray {
+                if tray {
+                    // The menu bar keeps Langolier alive, so the window goes
+                    // away for real and takes the rendering engine with it.
+                    api.prevent_close();
+                    enter_background(&window.app_handle().clone());
+                } else if cfg!(target_os = "macos") {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -587,18 +655,7 @@ pub fn run() {
             let mut s = db.settings().map_err(std::io::Error::other)?;
             let hidden = hidden_arg || s.start_hidden;
             // The main window is built here, not in tauri.conf.
-            tauri::WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::App("index.html".into()),
-            )
-            .title("Langolier")
-            .inner_size(1440.0, 940.0)
-            .min_inner_size(800.0, 600.0)
-            .background_color(tauri::window::Color(0x11, 0x12, 0x11, 0xff))
-            .visible(!hidden)
-            .build()?;
-            set_dock_icon(ICON_PNG);
+            build_main(app.handle(), !hidden).map_err(std::io::Error::other)?;
             app.manage(Tray(std::sync::Mutex::new(None)));
             if let Err(e) = apply_tray(app.handle(), s.tray_icon || hidden) {
                 eprintln!("Tray: {e}");
@@ -693,23 +750,23 @@ pub fn run() {
         ])
         .build(context())
         .expect("Could not start Langolier")
-        .run(|app, event| {
-            // Dock click while the window is hidden.
+        .run(|app, event| match event {
+            // Windows and Linux end the app with its last window. In the menu
+            // bar there is no window on purpose, so the exit is refused.
+            tauri::RunEvent::ExitRequested { api, .. }
+                if crate::db::BACKGROUND.load(Ordering::SeqCst) =>
+            {
+                api.prevent_exit()
+            }
+            // Dock click, macOS, with the window gone or hidden.
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen {
+            tauri::RunEvent::Reopen {
                 has_visible_windows,
                 ..
-            } = event
-            {
-                if !has_visible_windows {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                }
+            } if !has_visible_windows => show_main(app),
+            _ => {
+                let _ = app;
             }
-            #[cfg(not(target_os = "macos"))]
-            let _ = (app, event);
         });
 }
 /// Queues a selection of sources again.
@@ -771,6 +828,10 @@ pub fn set_dock_icon(bytes: &[u8]) {
 #[cfg(not(target_os = "macos"))]
 pub fn set_dock_icon(_bytes: &[u8]) {}
 pub const ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+/// Menu bar silhouette, 22 pt at @2x. Compiled in, so no packaging step can
+/// lose it on any of the three platforms.
+#[cfg(target_os = "macos")]
+const TRAY_TEMPLATE_PNG: &[u8] = include_bytes!("../icons/tray-template@2x.png");
 
 #[cfg(test)]
 mod integration_tests {
