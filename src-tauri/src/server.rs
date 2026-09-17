@@ -960,6 +960,25 @@ async fn handle(stream: TcpStream, app: Arc<App>, peer: IpAddr) -> Res<()> {
             }
             ask(&mut w, &req, &app, &s).await
         }
+        // Retrieval on its own: the passages, with no model writing an answer
+        // over them. What a shortcut hands to another writer, Apple
+        // Intelligence included, or what an agent reads directly.
+        ("POST", "/api/search") => {
+            let s = app.db.settings()?;
+            let expected = s.local_api_token.trim();
+            if expected.is_empty() || req.bearer != expected {
+                return json_err(&mut w, "401 Unauthorized", "Wrong or missing token.").await;
+            }
+            if over_chat_rate(&app, peer) {
+                return json_err(
+                    &mut w,
+                    "429 Too Many Requests",
+                    "Too many questions in a row. Try again in a minute.",
+                )
+                .await;
+            }
+            search_only(&mut w, &req, &app, &s).await
+        }
         ("POST", "/api/chat") => {
             if over_chat_rate(&app, peer) {
                 return json_err(
@@ -1172,6 +1191,47 @@ async fn ask(w: &mut TcpStream, req: &Request, app: &Arc<App>, s: &crate::db::Se
             // spoken answer, "text" carries the same thing plus its citations.
             v["text"] = json!(with_citations(&v));
             json_ok(w, v).await
+        }
+        Err(e) => json_err(w, "500 Internal Server Error", &e).await,
+    }
+}
+/// Passages for a question, nothing written over them. Lexical search needs
+/// no model at all; hybrid and semantic still embed the question, which the
+/// warning field says when the embedder is out of reach.
+async fn search_only(
+    w: &mut TcpStream,
+    req: &Request,
+    app: &Arc<App>,
+    s: &crate::db::Settings,
+) -> Res<()> {
+    let body: Value = serde_json::from_slice(&req.body).unwrap_or(json!({}));
+    let question = body["question"].as_str().unwrap_or("").trim().to_string();
+    if question.is_empty() {
+        return json_err(w, "400 Bad Request", "empty question").await;
+    }
+    let mode = body["mode"].as_str().unwrap_or("hybrid");
+    if !pipeline::MODES.contains(&mode) || mode == "general" {
+        return json_err(w, "400 Bad Request", "Invalid search mode").await;
+    }
+    let profile = assistant::get(&app.db, &s.active_assistant)?;
+    let effective = assistant::effective(s, profile.as_ref())?;
+    let scope = assistant::scope_docs(&app.db, profile.as_ref())?;
+    match crate::rag::retrieve(&app.db, &question, &effective, mode, scope.as_deref()).await {
+        Ok((found, warning)) => {
+            let sources: Vec<Value> = found
+                .iter()
+                .enumerate()
+                .map(|(i, src)| {
+                    json!({"n": i + 1, "name": src.name, "locator": src.locator,
+                           "text": src.text, "doc_id": src.doc_id, "score": src.score})
+                })
+                .collect();
+            json_ok(
+                w,
+                json!({"question": question, "mode": mode,
+                              "sources": sources, "warning": warning}),
+            )
+            .await
         }
         Err(e) => json_err(w, "500 Internal Server Error", &e).await,
     }
@@ -1403,6 +1463,40 @@ mod tests {
         let bare = json!({"content": "Je n'ai pas cette information.", "sources": []});
         assert_eq!(with_citations(&bare), "Je n'ai pas cette information.");
         assert_eq!(with_citations(&json!({})), "")
+    }
+    /// Retrieval alone is refused the same way, and rejects a mode it cannot
+    /// serve rather than quietly answering something else.
+    #[cfg(not(feature = "desktop"))]
+    #[tokio::test]
+    async fn retrieval_only_is_guarded_and_typed() {
+        let app = app();
+        let body = "{\"question\":\"eau\",\"mode\":\"lexical\"}";
+        let post = |head: &str| {
+            format!(
+                "POST /api/search HTTP/1.1\r\nHost: x\r\n{head}Content-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+        };
+        assert!(roundtrip(app.clone(), &post(""))
+            .await
+            .starts_with("HTTP/1.1 401"));
+        let mut s = app.db.settings().unwrap();
+        s.local_api_token = "sesame".into();
+        app.db.set_settings(&s).unwrap();
+        let ok = roundtrip(app.clone(), &post("Authorization: Bearer sesame\r\n")).await;
+        assert!(ok.starts_with("HTTP/1.1 200 OK"), "{ok}");
+        assert!(ok.contains("\"sources\""), "{ok}");
+        // "general" answers from the model, so it has no meaning here.
+        let bad = "{\"question\":\"eau\",\"mode\":\"general\"}";
+        let refused = roundtrip(
+            app.clone(),
+            &format!(
+                "POST /api/search HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer sesame\r\nContent-Length: {}\r\n\r\n{bad}",
+                bad.len()
+            ),
+        )
+        .await;
+        assert!(refused.starts_with("HTTP/1.1 400"), "{refused}")
     }
     /// The local API answers nobody without the right bearer token, and never
     /// at all while no token is set.

@@ -72,6 +72,8 @@ The desktop app is Rust plus Tauri 2 with a React front end. The same binary als
 | Assistants    | Named profiles with their own mission, scope, engine, caps and theme                                |
 | Export        | A `.langolier` bundle plus standalone launchers, updatable by dropping in a new bundle              |
 | Bridge        | Telegram long polling, no open port required                                                        |
+| Local API     | One JSON endpoint on loopback for Shortcuts, Siri and local agents, token required                 |
+| Menu bar      | Runs without its window, out of the Dock, still answering, background work paused                  |
 
 ### Install
 
@@ -176,6 +178,42 @@ llama.cpp tunes itself for the CPU that compiles it, so build the image on the h
 | `docs/`          | [Detailed guide](docs/GUIDE.md), also published at [infinition.github.io/langolier](https://infinition.github.io/langolier/) |
 | `scripts/`       | Install helpers, dataset tooling, deployment                                                                                 |
 
+### Ask from anywhere
+
+Langolier can answer over a local API, so Shortcuts, Siri or any local agent can query your memory. Switch it on under **Engines > Local API**: a token is generated, and the address is shown next to it. The server listens on `127.0.0.1` only, answers `POST` only, and refuses every request without the token.
+
+Two endpoints, and the difference matters:
+
+```bash
+# Writes the answer. Needs a model, local or remote.
+curl -X POST http://127.0.0.1:8787/api/ask \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question": "How do you purify water?"}'
+# → { "content": "...", "text": "... + sources", "sources": [ ... ] }
+
+# Returns the passages, writes nothing.
+curl -X POST http://127.0.0.1:8787/api/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question": "How do you purify water?", "mode": "lexical"}'
+# → { "sources": [ { "n": 1, "name": "...", "locator": "...", "text": "..." } ] }
+```
+
+`content` is the answer alone, which is what you want read out loud. `text` is the same answer with its sources listed underneath, which is what you want displayed. Both come from one request.
+
+`/api/search` stops before the writing, so whatever called it can write instead. In `lexical` and `exact`, retrieval is pure SQLite: no model is involved, nothing to install, nothing called. `hybrid` and `semantic` still turn the question into a vector, which needs the embedding engine, and the relevance judge uses a model when left on.
+
+To wire it to Siri, create a shortcut named *Search my memory* with **Ask for input**, then **Get contents of URL** on the address above with the `Authorization` header and a JSON body holding `question`, then **Get dictionary value** for `text` and **Show result**. Add a second **Get dictionary value** for `content` feeding **Speak text** if you would rather not have the source list read aloud.
+
+Answers are serialised with the window: a question from Siri and a question typed in the app never generate at the same time. Twelve questions a minute per address.
+
+### In the menu bar
+
+Turn on the icon under **Engines > In the background**. Closing the window then releases it rather than hiding it, the rendering engine goes with it, and on macOS the app steps out of the Dock the way a background agent does. Measured on a fresh start, the whole application drops from about 155 MB to about 83 MB, and what remains is the retrieval engine, still answering.
+
+Left click on the icon asks a question, right click opens the menu. Reopening rebuilds the window.
+
+While Langolier sits in the menu bar, watched folders and source processing stand down, which spares the disk and the battery. Two settings bring either back: **Keep watching folders in the menu bar** under Vigies, **Keep processing sources in the menu bar** under Sources. Both are off by default, so a folder filled in the meantime is picked up when you open the window again.
+
 ### Language
 
 The interface ships in English and French. The switch sits at the bottom of the sidebar and the choice persists. English source strings are the keys; French lives in `src/locales/fr.ts`.
@@ -242,6 +280,8 @@ L'application de bureau est en Rust avec Tauri 2 et une interface React. Le mêm
 | Assistants    | Profils nommés, chacun sa mission, son périmètre, son moteur, ses plafonds et son thème                   |
 | Export        | Un `.langolier` et des lanceurs autonomes, mis à jour en déposant un nouveau fichier                      |
 | Pont          | Telegram par interrogation longue, aucun port à ouvrir                                                    |
+| API locale    | Un point d'entrée JSON en boucle locale pour Raccourcis, Siri et les agents locaux, jeton exigé           |
+| Barre de menus | Tourne sans fenêtre, hors du Dock, toujours interrogeable, travaux de fond en veille                    |
 
 ### Installation
 
@@ -345,6 +385,42 @@ llama.cpp s'optimise pour le processeur qui le compile : construisez l'image sur
 | `docker/`        | Image serveur et fichier Compose                                                                                            |
 | `docs/`          | [Guide détaillé](docs/GUIDE.md), publié aussi sur [infinition.github.io/langolier](https://infinition.github.io/langolier/) |
 | `scripts/`       | Scripts d'installation, outillage dataset, déploiement                                                                      |
+
+### Interroger depuis n'importe où
+
+Langolier peut répondre par une API locale : Raccourcis, Siri ou n'importe quel agent local peut interroger votre mémoire. Activez-la dans **Moteurs > API locale** : un jeton est généré, et l'adresse s'affiche à côté. Le serveur n'écoute que sur `127.0.0.1`, ne répond qu'en `POST`, et refuse toute requête sans le jeton.
+
+Deux points d'entrée, et la différence compte :
+
+```bash
+# Rédige la réponse. Demande un modèle, local ou distant.
+curl -X POST http://127.0.0.1:8787/api/ask \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question": "Comment purifier de l eau ?"}'
+# → { "content": "...", "text": "... + sources", "sources": [ ... ] }
+
+# Renvoie les passages, ne rédige rien.
+curl -X POST http://127.0.0.1:8787/api/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question": "Comment purifier de l eau ?", "mode": "lexical"}'
+# → { "sources": [ { "n": 1, "name": "...", "locator": "...", "text": "..." } ] }
+```
+
+`content` est la réponse seule, celle qu'on veut entendre. `text` est la même réponse avec ses sources listées dessous, celle qu'on veut afficher. Les deux viennent d'une seule requête.
+
+`/api/search` s'arrête avant la rédaction, pour laisser rédiger celui qui l'appelle. En `lexical` et `exact`, la recherche est du pur SQLite : aucun modèle n'intervient, rien à installer, rien à appeler. Les modes `hybrid` et `semantic` transforment la question en vecteur, ce qui demande le moteur d'embeddings, et le juge de pertinence appelle un modèle si vous le laissez actif.
+
+Pour le brancher à Siri, créez un raccourci nommé *Cherche dans ma mémoire* avec **Demander une entrée**, puis **Obtenir le contenu de l'URL** sur l'adresse ci-dessus avec l'en-tête `Authorization` et un corps JSON contenant `question`, puis **Obtenir la valeur du dictionnaire** pour `text` et **Afficher le résultat**. Ajoutez un second **Obtenir la valeur du dictionnaire** pour `content` vers **Énoncer le texte** si vous préférez ne pas faire lire la liste des sources.
+
+Les réponses sont sérialisées avec la fenêtre : une question posée à Siri et une question tapée dans l'app ne génèrent jamais en même temps. Douze questions par minute et par adresse.
+
+### Dans la barre des menus
+
+Activez l'icône dans **Moteurs > En arrière-plan**. Fermer la fenêtre la libère alors au lieu de la masquer, le moteur de rendu part avec elle, et sur macOS l'application quitte le Dock comme un agent d'arrière-plan. Mesuré sur un démarrage neuf, l'ensemble passe d'environ 155 Mo à environ 83 Mo, et ce qui reste est le moteur de recherche, toujours interrogeable.
+
+Un clic gauche sur l'icône pose une question, un clic droit ouvre le menu. La réouverture reconstruit la fenêtre.
+
+Pendant que Langolier est dans la barre des menus, la surveillance des dossiers et le traitement des sources se mettent en veille, ce qui épargne le disque et la batterie. Deux réglages les réveillent : **Continuer à surveiller les dossiers dans la barre des menus** dans Vigies, **Continuer à traiter les sources dans la barre des menus** dans Sources. Les deux sont désactivés par défaut : un dossier qui se remplit entre-temps est repris à la réouverture de la fenêtre.
 
 ### Langue
 

@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Langolier - your knowledge, answered with citations</title>
+<meta name="description" content="A local knowledge studio. Feed it documents, code, videos and voice notes, ask questions, get answers with citations. Nothing leaves the machine unless you point it at a cloud API.">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#121213">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="langolier.png">
+<link rel="icon" type="image/png" href="langolier.png">
+<meta property="og:title" content="Langolier - your knowledge, answered with citations">
+<meta property="og:description" content="A local knowledge studio. Ask your own documents, get answers with citations, on your machine.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="langolier.png">
+<style>
+/* ===================================================================
+   Langolier - showcase page.
+   The tokens come from src/style.css so the page and the application
+   are the same object. Dark only, like the app.
+   No external request: no CDN, no webfont, no analytics.
+   =================================================================== */
+:root {
+  --bg: #121213;
+  --panel: #191a1b;
+  --panel-soft: #1c1b1a;
+  --line: #2b2b2e;
+  --line-soft: #363330;
+  --muted: #8b8b92;
+  --dim: #6f6b66;
+  --text: #e8e7e6;
+  --cream: #f1f1f2;
+  /* The accent is kept under the name the app uses. */
+  --lime: #e6a06b;
+  --orange: #e8834f;
+  --danger: #d9705f;
+  --radius: 10px;
+  --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+a { color: var(--lime); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 4px; }
+::selection { background: rgba(230,160,107,.25); }
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+p { margin: 0 0 1em; }
+p:last-child { margin-bottom: 0; }
+code, kbd { font-family: var(--mono); font-size: .92em; }
+.shell { max-width: 1140px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); }
+
+/* Top bar, the app's own header line. */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid var(--line);
+  background: rgba(18,18,19,.86);
+  backdrop-filter: blur(10px);
+  padding-top: env(safe-area-inset-top);
+}
+.topbar .shell { display: flex; align-items: center; gap: 14px; height: 58px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--cream); font-weight: 600; letter-spacing: -.02em; }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; border-radius: 7px; display: block; }
+.brand .dot { color: var(--lime); }
+.tabs { display: flex; gap: 2px; margin-left: 10px; flex: 1; }
+.tabs a {
+  padding: 6px 11px; border-radius: 8px; color: var(--muted);
+  font-size: 13px; transition: background .15s, color .15s;
+}
+.tabs a:hover { background: rgba(230,160,107,.08); color: var(--lime); text-decoration: none; }
+@media (max-width: 900px) { .tabs { display: none; } }
+.langswitch { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.langswitch button {
+  border: 0; background: none; color: var(--muted); font-family: inherit;
+  font-size: 11px; letter-spacing: .08em; padding: 5px 11px; cursor: pointer;
+}
+.langswitch button.on { background: var(--lime); color: #1a1207; font-weight: 600; }
+
+/* Hero. */
+.hero { position: relative; padding: clamp(56px, 9vw, 104px) 0 clamp(40px, 6vw, 72px); }
+.hero::before {
+  content: ''; position: absolute; inset: -10% 0 auto 0; height: 560px;
+  background: radial-gradient(58% 58% at 50% 0%, rgba(230,160,107,.10), transparent 70%);
+  pointer-events: none;
+}
+.hero .shell { position: relative; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-bottom: 18px; }
+.hero h1 { font-size: clamp(34px, 6vw, 62px); line-height: 1.05; margin-bottom: 20px; }
+.hero h1 .dot { color: var(--lime); }
+.lead { font-size: clamp(16px, 2.2vw, 19px); color: var(--muted); max-width: 62ch; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 19px; border-radius: var(--radius); font-size: 14px; font-weight: 500;
+  border: 1px solid var(--line-soft); color: var(--text);
+  transition: border-color .15s, background .15s, color .15s;
+}
+.btn:hover { border-color: var(--lime); color: var(--lime); text-decoration: none; }
+.btn.primary { background: var(--lime); border-color: var(--lime); color: #1a1207; font-weight: 600; }
+.btn.primary:hover { background: var(--orange); border-color: var(--orange); color: #1a1207; }
+
+/* Sections. */
+section { padding: clamp(46px, 7vw, 86px) 0; border-top: 1px solid var(--line); }
+.sec-head { margin-bottom: 34px; max-width: 70ch; }
+.sec-head h2 { font-size: clamp(24px, 3.4vw, 34px); margin-bottom: 12px; }
+.sec-head p { color: var(--muted); }
+.grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px; min-width: 0;
+}
+.card h3 { font-size: 16px; margin-bottom: 9px; color: var(--cream); }
+.card p { color: var(--muted); font-size: 14px; }
+.card .tag { display: inline-block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--lime); border: 1px solid rgba(230,160,107,.3); border-radius: 999px; padding: 2px 9px; margin-bottom: 12px; }
+
+/* Screenshots. */
+figure { margin: 0 0 30px; }
+figure img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+}
+figcaption { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+figcaption b { color: var(--cream); font-weight: 600; }
+
+/* Steps. */
+ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+ol.steps li {
+  counter-increment: s; position: relative; padding: 16px 18px 16px 52px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  color: var(--muted); font-size: 14px;
+}
+ol.steps li::before {
+  content: counter(s); position: absolute; left: 18px; top: 16px;
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: rgba(230,160,107,.14); color: var(--lime); font-size: 11px; font-weight: 700;
+}
+ol.steps b { color: var(--cream); font-weight: 600; }
+
+/* Tables. */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+th { color: var(--dim); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--cream); white-space: nowrap; }
+td code { color: var(--lime); }
+
+/* Code blocks. */
+pre {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.7;
+  color: var(--text); margin: 0 0 16px;
+}
+pre .c { color: var(--dim); }
+.note {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: rgba(230,160,107,.06); border: 1px solid rgba(230,160,107,.22);
+  border-radius: 12px; padding: 15px 17px; color: var(--muted); font-size: 14px;
+}
+.note b { color: var(--lime); font-weight: 600; }
+
+/* Footer. */
+footer { border-top: 1px solid var(--line); padding: 34px 0 calc(34px + env(safe-area-inset-bottom)); color: var(--dim); font-size: 13px; }
+footer .shell { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+.support { display: inline-flex; align-items: center; gap: 7px; color: var(--lime); }
+
+/* Both languages ship in the page; the root attribute decides which shows. */
+[data-lang] { display: none; }
+html[lang="en"] [data-lang="en"], html[lang="fr"] [data-lang="fr"] { display: revert; }
+/* A component rule that sets its own display outranks the two above, so it
+   has to be restated here. `.card .tag` is the only one in this page. */
+.card .tag[data-lang] { display: none; }
+html[lang="en"] .card .tag[data-lang="en"],
+html[lang="fr"] .card .tag[data-lang="fr"] { display: inline-block; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="shell">
+    <a class="brand" href="#top">
+      <img src="langolier.png" alt="">
+      <span>langolier<span class="dot">.</span></span>
+    </a>
+    <nav class="tabs">
+      <a href="#what" data-lang="en">What it does</a><a href="#what" data-lang="fr">Ce que ça fait</a>
+      <a href="#tour" data-lang="en">A look around</a><a href="#tour" data-lang="fr">Tour</a>
+      <a href="#install" data-lang="en">Install</a><a href="#install" data-lang="fr">Installation</a>
+      <a href="#assistants">Assistants</a>
+      <a href="#siri">Siri</a>
+      <a href="https://github.com/infinition/langolier/wiki">Wiki</a>
+    </nav>
+    <div class="langswitch" role="group" aria-label="Language">
+      <button type="button" id="en" class="on">EN</button>
+      <button type="button" id="fr">FR</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<div class="hero">
+  <div class="shell">
+    <p class="eyebrow" data-lang="en">Your knowledge, no silos</p>
+    <p class="eyebrow" data-lang="fr">Votre savoir, sans silos</p>
+    <h1 data-lang="en">Ask your own documents<span class="dot">.</span></h1>
+    <h1 data-lang="fr">Interrogez vos propres documents<span class="dot">.</span></h1>
+    <p class="lead" data-lang="en">
+      A local knowledge studio. Feed it documents, code, videos and voice notes, ask
+      questions, get answers with citations. Nothing leaves the machine unless you
+      point it at a cloud API.
+    </p>
+    <p class="lead" data-lang="fr">
+      Un studio de connaissance local. Donnez-lui des documents, du code, des vidéos et
+      des notes vocales, posez vos questions, obtenez des réponses avec leurs citations.
+      Rien ne quitte la machine, sauf si vous le branchez sur une API distante.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="en">Download</a>
+      <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="fr">Télécharger</a>
+      <a class="btn" href="https://github.com/infinition/langolier/wiki" data-lang="en">Read the wiki</a>
+      <a class="btn" href="https://github.com/infinition/langolier/wiki" data-lang="fr">Lire le wiki</a>
+      <a class="btn" href="https://github.com/infinition/langolier">GitHub</a>
+    </div>
+  </div>
+</div>
+
+<section id="what">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">What it does</h2>
+      <h2 data-lang="fr">Ce que ça fait</h2>
+      <p data-lang="en">
+        Langolier indexes what you already own and answers from it. Retrieval runs on
+        SQLite: BM25 for words, vectors for meaning, fused with RRF, optionally reranked
+        by a judge model. When nothing in the corpus supports an answer, it says so
+        instead of inventing one.
+      </p>
+      <p data-lang="fr">
+        Langolier indexe ce que vous possédez déjà et répond à partir de là. La recherche
+        tourne sur SQLite : BM25 pour les mots, des vecteurs pour le sens, fusionnés par
+        RRF, et si vous le voulez reclassés par un modèle juge. Quand rien dans le corpus
+        ne soutient une réponse, il le dit au lieu d'inventer.
+      </p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-lang="en">Feature</th><th data-lang="fr">Fonction</th>
+            <th data-lang="en">Detail</th><th data-lang="fr">Détail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-lang="en">Ingest</td><td data-lang="fr">Ingestion</td>
+            <td data-lang="en">PDF, DOCX, PPTX, XLSX, ODT, ODP, ODS, Markdown, text, CSV, JSON, notebooks, source files, subtitles</td>
+            <td data-lang="fr">PDF, DOCX, PPTX, XLSX, ODT, ODP, ODS, Markdown, texte, CSV, JSON, carnets, fichiers source, sous-titres</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Transcribe</td><td data-lang="fr">Transcription</td>
+            <td data-lang="en">Video and audio through whisper.cpp, including voice memos</td>
+            <td data-lang="fr">Vidéo et audio via whisper.cpp, mémos vocaux compris</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Watch folders</td><td data-lang="fr">Vigies</td>
+            <td data-lang="en">Local or mounted NAS paths, polled on a timer, sync or hoover mode</td>
+            <td data-lang="fr">Dossiers locaux ou NAS monté, scrutés à intervalle, en mode sync ou aspirateur</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Retrieve</td><td data-lang="fr">Recherche</td>
+            <td data-lang="en">FTS5 BM25 and dense vectors, RRF fusion, optional LLM reranker, abstention thresholds</td>
+            <td data-lang="fr">BM25 FTS5 et vecteurs denses, fusion RRF, reclassement LLM optionnel, seuils d'abstention</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Ground</td><td data-lang="fr">Ancrage</td>
+            <td data-lang="en">Strict mode answers only from retrieved passages, with inline citations</td>
+            <td data-lang="fr">Le mode strict ne répond que depuis les passages retrouvés, citations à l'appui</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Assistants</td><td data-lang="fr">Assistants</td>
+            <td data-lang="en">Named profiles with their own mission, scope, engine, caps and theme</td>
+            <td data-lang="fr">Des profils nommés avec leur mission, leur périmètre, leur moteur, leurs plafonds et leur thème</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Export</td><td data-lang="fr">Export</td>
+            <td data-lang="en">A <code>.langolier</code> bundle plus standalone launchers, updatable by dropping in a new bundle</td>
+            <td data-lang="fr">Un paquet <code>.langolier</code> et ses lanceurs autonomes, mis à jour en déposant un nouveau paquet</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Bridge</td><td data-lang="fr">Pont</td>
+            <td data-lang="en">Telegram long polling, no open port required</td>
+            <td data-lang="fr">Telegram par interrogation longue, aucun port à ouvrir</td>
+          </tr>
+          <tr>
+            <td data-lang="en">Local API</td><td data-lang="fr">API locale</td>
+            <td data-lang="en">One JSON endpoint on loopback, for Shortcuts, Siri and local agents</td>
+            <td data-lang="fr">Un point d'entrée JSON en boucle locale, pour Raccourcis, Siri et les agents locaux</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="tour">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">A look around</h2>
+      <h2 data-lang="fr">Tour du propriétaire</h2>
+    </div>
+
+    <figure>
+      <img src="screenshots/conversation.png" alt="Langolier answering with citations">
+      <figcaption data-lang="en"><b>Conversation.</b> Every factual sentence carries a numbered citation, and the chips under the answer open the exact passage that backed it. The footer shows which memory mode and which model produced it.</figcaption>
+      <figcaption data-lang="fr"><b>Conversation.</b> Chaque phrase factuelle porte une citation numérotée, et les pastilles sous la réponse ouvrent le passage exact qui l'appuie. Le pied de page indique le mode de mémoire et le modèle qui l'ont produite.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="screenshots/sources.png" alt="Source library">
+      <figcaption data-lang="en"><b>Sources.</b> One row per ingested file, with its language, its passage count and how many of those passages already carry a vector. List, tree and full-text search share the same view, and a folder in the tree can be reindexed or removed in one click.</figcaption>
+      <figcaption data-lang="fr"><b>Sources.</b> Une ligne par fichier ingéré, avec sa langue, son nombre de passages et combien d'entre eux portent déjà un vecteur. Liste, arborescence et recherche plein texte partagent la même vue, et un dossier de l'arbre se réindexe ou se retire en un clic.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="screenshots/watches.png" alt="Watched folders">
+      <figcaption data-lang="en"><b>Watches.</b> Folders that feed themselves into the memory. Sync leaves files in place, hoover moves them in. Each card shows what is ready, queued or failed, when it was last scanned, and can be paused without losing anything.</figcaption>
+      <figcaption data-lang="fr"><b>Vigies.</b> Des dossiers qui alimentent la mémoire tout seuls. Le mode sync laisse les fichiers en place, le mode aspirateur les déplace. Chaque carte montre ce qui est prêt, en file ou en échec, la date du dernier scan, et se met en pause sans rien perdre.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="screenshots/assistant-editor.png" alt="Assistant editor">
+      <figcaption data-lang="en"><b>Assistants.</b> A profile is a mission, a knowledge scope, an engine and a set of caps. The token caps bound an API bill, and hiding source names keeps document titles out of the answers.</figcaption>
+      <figcaption data-lang="fr"><b>Assistants.</b> Un profil, c'est une mission, un périmètre de connaissance, un moteur et des plafonds. Les plafonds de jetons bornent une facture d'API, et masquer les noms de sources garde les titres de documents hors des réponses.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="screenshots/engines.png" alt="Engine settings">
+      <figcaption data-lang="en"><b>Engines.</b> The brain and the memory are configured separately, so a cloud chat model can sit next to a local embedder. Below, the grounding rules: abstention sentence, relevance judge, thresholds.</figcaption>
+      <figcaption data-lang="fr"><b>Moteurs.</b> Le cerveau et la mémoire se règlent séparément : un modèle de conversation distant peut cohabiter avec un moteur d'embeddings local. En dessous, les règles d'ancrage : phrase d'abstention, juge de pertinence, seuils.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="screenshots/observatory.png" alt="Observatory metrics">
+      <figcaption data-lang="en"><b>Observatory.</b> Latency, tokens per second, success rate and the activity log, measured on the machine. No simulated data.</figcaption>
+      <figcaption data-lang="fr"><b>Observatoire.</b> Latence, jetons par seconde, taux de succès et journal d'activité, mesurés sur la machine. Aucune donnée simulée.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="install">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">Install</h2>
+      <h2 data-lang="fr">Installation</h2>
+      <p data-lang="en">Grab a build from the releases page. macOS builds are ad hoc signed: on first launch, right click the app and pick Open.</p>
+      <p data-lang="fr">Prenez une version sur la page des releases. Les versions macOS sont signées à la volée : au premier lancement, faites un clic droit sur l'app et choisissez Ouvrir.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th data-lang="en">Platform</th><th data-lang="fr">Plateforme</th>
+          <th data-lang="en">File</th><th data-lang="fr">Fichier</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>macOS (Apple Silicon)</td><td><code>.dmg</code></td></tr>
+          <tr><td>Windows</td><td data-lang="en"><code>.exe</code> installer</td><td data-lang="fr">installeur <code>.exe</code></td></tr>
+          <tr><td>Linux</td><td data-lang="en"><code>.AppImage</code>, <code>.deb</code> or <code>.rpm</code></td><td data-lang="fr"><code>.AppImage</code>, <code>.deb</code> ou <code>.rpm</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:20px">
+      <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="en">Go to releases</a>
+      <a class="btn primary" href="https://github.com/infinition/langolier/releases" data-lang="fr">Aller aux releases</a>
+    </p>
+    <div class="sec-head" style="margin-top:44px">
+      <h3 style="font-size:19px;margin-bottom:10px" data-lang="en">Build from source</h3>
+      <h3 style="font-size:19px;margin-bottom:10px" data-lang="fr">Compiler depuis les sources</h3>
+      <p data-lang="en">Requires the Tauri prerequisites, Rust stable, Node 20 or newer, and <code>cmake</code> for the embedded llama.cpp.</p>
+      <p data-lang="fr">Nécessite les prérequis Tauri, Rust stable, Node 20 ou plus, et <code>cmake</code> pour le llama.cpp intégré.</p>
+    </div>
+<pre>git clone https://github.com/infinition/langolier.git
+cd langolier
+npm ci
+npm run tauri build</pre>
+  </div>
+</section>
+
+<section id="assistants">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">Assistants, watches, Telegram</h2>
+      <h2 data-lang="fr">Assistants, vigies, Telegram</h2>
+      <p data-lang="en">Three things worth setting up once. The wiki walks through each of them in detail.</p>
+      <p data-lang="fr">Trois choses à mettre en place une fois. Le wiki détaille chacune d'elles.</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <span class="tag">Assistants</span>
+        <h3 data-lang="en">A profile answers in your place</h3>
+        <h3 data-lang="fr">Un profil répond à votre place</h3>
+        <p data-lang="en">Give it a mission, a scope of sources, an engine and caps. Export it and you get a <code>.langolier</code> bundle with its launchers, ready to run on another machine. Drop a new bundle next to the launcher to update it: it is picked up in under thirty seconds, and conversations survive.</p>
+        <p data-lang="fr">Donnez-lui une mission, un périmètre de sources, un moteur et des plafonds. Exportez-le et vous obtenez un paquet <code>.langolier</code> avec ses lanceurs, prêt à tourner sur une autre machine. Déposez un nouveau paquet à côté du lanceur pour le mettre à jour : il est repris en moins de trente secondes, et les conversations survivent.</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-lang="en">Watches</span><span class="tag" data-lang="fr">Vigies</span>
+        <h3 data-lang="en">Folders that feed themselves</h3>
+        <h3 data-lang="fr">Des dossiers qui se remplissent seuls</h3>
+        <p data-lang="en">Point Langolier at a folder, local or on a mounted NAS. It is scanned on a timer you choose, and anything supported that lands there enters the memory on its own. Sync leaves the files where they are, hoover moves them in.</p>
+        <p data-lang="fr">Désignez un dossier à Langolier, en local ou sur un NAS monté. Il est scruté à l'intervalle que vous choisissez, et tout fichier pris en charge qui y atterrit entre dans la mémoire tout seul. Le mode sync laisse les fichiers en place, le mode aspirateur les déplace.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Telegram</span>
+        <h3 data-lang="en">Your assistant in a chat</h3>
+        <h3 data-lang="fr">Votre assistant dans une discussion</h3>
+        <p data-lang="en">Create a bot with <code>@BotFather</code>, paste the token into the profile, test it, then export. The bridge uses long polling, so no port is opened and no domain is needed. One chat maps to one conversation, and <code>/new</code> starts another.</p>
+        <p data-lang="fr">Créez un bot avec <code>@BotFather</code>, collez le jeton dans le profil, testez, puis exportez. Le pont utilise l'interrogation longue : aucun port ouvert, aucun domaine nécessaire. Une discussion correspond à une conversation, et <code>/new</code> en démarre une autre.</p>
+      </div>
+    </div>
+    <div class="note" style="margin-top:22px">
+      <span>&#9679;</span>
+      <p data-lang="en"><b>On Telegram.</b> Caps and source privacy apply exactly as they do on the web page. Messages travel through Telegram's servers, so keep it to content that may go there.</p>
+      <p data-lang="fr"><b>À propos de Telegram.</b> Les plafonds et la confidentialité des sources s'appliquent comme sur la page web. Les messages transitent par les serveurs de Telegram : réservez-le à du contenu qui peut y aller.</p>
+    </div>
+  </div>
+</section>
+
+<section id="siri">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">Ask from anywhere</h2>
+      <h2 data-lang="fr">Interroger depuis n'importe où</h2>
+      <p data-lang="en">
+        Langolier can answer over a local API. Switch it on under Engines, and Shortcuts,
+        Siri or any local agent can query your memory. Loopback only, never the network,
+        and a token is required.
+      </p>
+      <p data-lang="fr">
+        Langolier peut répondre par une API locale. Activez-la dans Moteurs, et Raccourcis,
+        Siri ou n'importe quel agent local peut interroger votre mémoire. Boucle locale
+        uniquement, jamais le réseau, et un jeton est exigé.
+      </p>
+    </div>
+    <ol class="steps">
+      <li data-lang="en">Under <b>Engines &gt; Local API</b>, switch it on. A token is generated, copy it.</li>
+      <li data-lang="fr">Dans <b>Moteurs &gt; API locale</b>, activez-la. Un jeton est généré, copiez-le.</li>
+      <li data-lang="en">In the Shortcuts app, create a shortcut named <b>Search my memory</b>.</li>
+      <li data-lang="fr">Dans l'app Raccourcis, créez un raccourci nommé <b>Cherche dans ma mémoire</b>.</li>
+      <li data-lang="en">Add <b>Ask for input</b>, then <b>Get contents of URL</b> pointing at the address below, method <code>POST</code>, header <code>Authorization</code> set to <code>Bearer</code> plus your token, JSON body with a <code>question</code> field.</li>
+      <li data-lang="fr">Ajoutez <b>Demander une entrée</b>, puis <b>Obtenir le contenu de l'URL</b> vers l'adresse ci-dessous, méthode <code>POST</code>, en-tête <code>Authorization</code> valant <code>Bearer</code> suivi de votre jeton, corps JSON avec un champ <code>question</code>.</li>
+      <li data-lang="en">Finish with <b>Get dictionary value</b> for <code>text</code> and <b>Show result</b>. For the spoken answer without the source list, read <code>content</code> instead.</li>
+      <li data-lang="fr">Terminez par <b>Obtenir la valeur du dictionnaire</b> pour <code>text</code> et <b>Afficher le résultat</b>. Pour la réponse lue sans la liste des sources, prenez <code>content</code> à la place.</li>
+    </ol>
+<pre style="margin-top:18px">POST http://127.0.0.1:8787/api/ask
+Authorization: Bearer &lt;token&gt;
+
+{ "question": "..." }
+
+<span class="c">→</span> { "content": "...", "text": "... + sources", "sources": [ ... ] }</pre>
+    <div class="note">
+      <span>&#9679;</span>
+      <p data-lang="en"><b>What it is not.</b> The API listens on <code>127.0.0.1</code> only, answers <code>POST</code> only, and refuses every request without the right token. Nothing is exposed to your network.</p>
+      <p data-lang="fr"><b>Ce que ce n'est pas.</b> L'API n'écoute que sur <code>127.0.0.1</code>, ne répond qu'en <code>POST</code>, et refuse toute requête sans le bon jeton. Rien n'est exposé à votre réseau.</p>
+    </div>
+
+    <div class="sec-head" style="margin-top:48px">
+      <h3 style="font-size:20px;margin-bottom:10px" data-lang="en">Let something else do the writing</h3>
+      <h3 style="font-size:20px;margin-bottom:10px" data-lang="fr">Laisser quelqu'un d'autre rédiger</h3>
+      <p data-lang="en">
+        <code>/api/ask</code> writes the answer, which takes a model, local or remote.
+        <code>/api/search</code> stops one step earlier: it returns the passages, ranked
+        and located, and lets whatever called it write. A shortcut can hand them to the
+        writer of its choice, an agent can read them as they are.
+      </p>
+      <p data-lang="fr">
+        <code>/api/ask</code> rédige la réponse, ce qui demande un modèle, local ou distant.
+        <code>/api/search</code> s'arrête une étape plus tôt : il renvoie les passages,
+        classés et localisés, et laisse rédiger celui qui l'a appelé. Un raccourci peut les
+        confier au rédacteur de son choix, un agent peut les lire tels quels.
+      </p>
+    </div>
+<pre>POST http://127.0.0.1:8787/api/search
+Authorization: Bearer &lt;token&gt;
+
+{ "question": "...", "mode": "lexical" }
+
+<span class="c">→</span> { "sources": [ { "n": 1, "name": "...", "locator": "...", "text": "..." } ] }</pre>
+    <div class="note">
+      <span>&#9679;</span>
+      <p data-lang="en"><b>What each mode needs.</b> In <code>lexical</code> and <code>exact</code>, retrieval is pure SQLite: no model is involved, so nothing has to be installed and nothing is called. <code>hybrid</code> and <code>semantic</code> still turn your question into a vector, which needs the embedding engine, and the relevance judge uses a model when you leave it on.</p>
+      <p data-lang="fr"><b>Ce que chaque mode demande.</b> En <code>lexical</code> et <code>exact</code>, la recherche est du pur SQLite : aucun modèle n'intervient, donc rien à installer et rien à appeler. Les modes <code>hybrid</code> et <code>semantic</code> transforment la question en vecteur, ce qui demande le moteur d'embeddings, et le juge de pertinence appelle un modèle si vous le laissez actif.</p>
+    </div>
+  </div>
+</section>
+
+<section id="privacy">
+  <div class="shell">
+    <div class="sec-head">
+      <h2 data-lang="en">Where your data sits</h2>
+      <h2 data-lang="fr">Où vivent vos données</h2>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3 data-lang="en">On your machine</h3>
+        <h3 data-lang="fr">Sur votre machine</h3>
+        <p data-lang="en">Sources, passages, vectors and conversations live in one SQLite file in the application data folder. Original files stay where they are. Removing a source drops its passages and vectors from the index, not the file.</p>
+        <p data-lang="fr">Sources, passages, vecteurs et conversations vivent dans un fichier SQLite du dossier de données de l'application. Les fichiers d'origine restent où ils sont. Retirer une source enlève ses passages et ses vecteurs de l'index, pas le fichier.</p>
+      </div>
+      <div class="card">
+        <h3 data-lang="en">Unless you say otherwise</h3>
+        <h3 data-lang="fr">Sauf si vous en décidez autrement</h3>
+        <p data-lang="en">With the embedded engine, nothing leaves the machine. Point the brain at a cloud provider and your questions and the retrieved passages go to it, which the interface states plainly next to the setting.</p>
+        <p data-lang="fr">Avec le moteur intégré, rien ne quitte la machine. Branchez le cerveau sur un fournisseur distant et vos questions ainsi que les passages retrouvés lui sont envoyés, ce que l'interface indique clairement à côté du réglage.</p>
+      </div>
+      <div class="card">
+        <h3 data-lang="en">Said plainly when unsure</h3>
+        <h3 data-lang="fr">Dit franchement en cas de doute</h3>
+        <p data-lang="en">In strict mode, an answer with no supporting passage is refused rather than guessed. The abstention sentence is yours to write, and the observatory measures what actually happened, without simulated data.</p>
+        <p data-lang="fr">En mode strict, une réponse sans passage à l'appui est refusée plutôt que devinée. La phrase d'abstention est la vôtre, et l'observatoire mesure ce qui s'est réellement passé, sans données simulées.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <span>Langolier · MPL-2.0 · <a href="https://github.com/infinition/langolier">github.com/infinition/langolier</a></span>
+    <a class="support" href="https://www.buymeacoffee.com/infinition" data-lang="en">Support the project</a>
+    <a class="support" href="https://www.buymeacoffee.com/infinition" data-lang="fr">Soutenir le projet</a>
+  </div>
+</footer>
+
+<script>
+// The page ships both languages; the switch just flips the root attribute.
+// The choice is remembered, and the browser decides the first time.
+(function () {
+  var KEY = "langolier.site.lang";
+  var root = document.documentElement;
+  function apply(lang) {
+    root.lang = lang;
+    document.getElementById("en").classList.toggle("on", lang === "en");
+    document.getElementById("fr").classList.toggle("on", lang === "fr");
+    try { localStorage.setItem(KEY, lang); } catch (e) { /* private window */ }
+  }
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
+  apply(saved === "fr" || saved === "en" ? saved
+    : ((navigator.language || "en").toLowerCase().indexOf("fr") === 0 ? "fr" : "en"));
+  document.getElementById("en").addEventListener("click", function () { apply("en"); });
+  document.getElementById("fr").addEventListener("click", function () { apply("fr"); });
+})();
+</script>
+
+</body>
+</html>
