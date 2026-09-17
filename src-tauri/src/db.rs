@@ -2,7 +2,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 pub type Res<T> = Result<T, String>;
 pub fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -104,6 +104,29 @@ impl Default for Settings {
         }
     }
 }
+/// Live pools, by data directory. Windows refuses to replace a file that is
+/// still open, so replacing the database has to close the pooled connections
+/// first, and the caller only knows the directory.
+type Idle = Mutex<Vec<Connection>>;
+static POOLS: Mutex<Vec<(PathBuf, Weak<Idle>)>> = Mutex::new(Vec::new());
+/// Closes every idle connection held for this data directory. Connections
+/// currently lent out are not affected: the caller owns that ordering.
+pub fn close_pooled(root: &Path) {
+    let target = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    if let Ok(mut pools) = POOLS.lock() {
+        pools.retain(|(path, weak)| match weak.upgrade() {
+            None => false,
+            Some(pool) => {
+                if *path == target {
+                    if let Ok(mut idle) = pool.lock() {
+                        idle.clear()
+                    }
+                }
+                true
+            }
+        })
+    }
+}
 /// Connections kept warm between calls. Reopening one drops the page cache,
 /// and a dense search then rereads every vector from disk.
 const POOL_SIZE: usize = 8;
@@ -111,7 +134,7 @@ const POOL_SIZE: usize = 8;
 /// and like one it must not be held across an await: it is not Sync.
 pub struct Pooled {
     conn: Option<Connection>,
-    pool: Arc<Mutex<Vec<Connection>>>,
+    pool: Arc<Idle>,
 }
 impl Deref for Pooled {
     type Target = Connection;
@@ -138,7 +161,7 @@ impl Drop for Pooled {
 #[derive(Clone)]
 pub struct Db {
     pub root: PathBuf,
-    pool: Arc<Mutex<Vec<Connection>>>,
+    pool: Arc<Idle>,
 }
 /// Vectors written before storage normalization carry their original length,
 /// which a plain dot product would read as a score. One pass, once.
@@ -184,6 +207,13 @@ impl Db {
             root: root.into(),
             pool: Arc::new(Mutex::new(vec![])),
         };
+        if let Ok(mut pools) = POOLS.lock() {
+            pools.retain(|(_, weak)| weak.strong_count() > 0);
+            pools.push((
+                root.canonicalize().unwrap_or_else(|_| root.to_path_buf()),
+                Arc::downgrade(&db.pool),
+            ));
+        }
         let c = db.conn()?;
         c.execute_batch("PRAGMA journal_mode=WAL;
  CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL);
@@ -332,4 +362,31 @@ pub fn json_rows(db: &Db, sql: &str) -> Res<Vec<serde_json::Value>> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(err)?;
     Ok(r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Replacing the database file has to find no connection left open, or
+    /// Windows refuses the rename.
+    #[test]
+    fn closing_the_pool_releases_every_idle_connection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::new(tmp.path()).unwrap();
+        {
+            let _a = db.conn().unwrap();
+            let _b = db.conn().unwrap();
+        }
+        assert_eq!(db.pool.lock().unwrap().len(), 2, "both should be pooled");
+        close_pooled(tmp.path());
+        assert_eq!(db.pool.lock().unwrap().len(), 0, "the pool must be empty");
+        // The database stays usable: a new connection is opened on demand.
+        assert!(db.settings().is_ok());
+        // A pool for another directory is left alone.
+        let other = tempfile::tempdir().unwrap();
+        let far = Db::new(other.path()).unwrap();
+        drop(far.conn().unwrap());
+        close_pooled(tmp.path());
+        assert_eq!(far.pool.lock().unwrap().len(), 1)
+    }
 }

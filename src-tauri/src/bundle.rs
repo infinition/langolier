@@ -154,6 +154,8 @@ pub fn install(bundle_bytes: &[u8], data_dir: &Path) -> Res<()> {
     std::fs::write(&staged, bundle_bytes).map_err(err)?;
     validate(&staged)?;
     let live = data_dir.join("langolier.sqlite3");
+    // Pooled connections keep the file open, and Windows will not replace it.
+    crate::db::close_pooled(data_dir);
     if live.exists() {
         // Conversations are the only thing the server produced.
         let c = Connection::open(&live).map_err(err)?;
