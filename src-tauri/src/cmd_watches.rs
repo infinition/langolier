@@ -1,6 +1,6 @@
 //! Tauri commands for watched folders.
-use crate::desktop::AppState;
 use crate::db::{err, Res};
+use crate::desktop::AppState;
 use serde_json::Value;
 use tauri::State;
 

@@ -92,7 +92,11 @@ pub async fn search_sources(state: State<'_, AppState>, query: String, mode: Str
     Ok(json!({"sources":sources,"warning":warning,"latency_ms":start.elapsed().as_millis()}))
 }
 #[tauri::command]
-pub fn add_evaluation(state: State<AppState>, question: String, expected_document: String) -> Res<()> {
+pub fn add_evaluation(
+    state: State<AppState>,
+    question: String,
+    expected_document: String,
+) -> Res<()> {
     if question.trim().is_empty() {
         return Err("Empty question".into());
     }

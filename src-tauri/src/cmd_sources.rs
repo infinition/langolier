@@ -1,6 +1,6 @@
 //! Tauri commands for sources: importing, reprocessing, and editing passages.
-use crate::desktop::AppState;
 use crate::db::{err, now, Db, Res};
+use crate::desktop::AppState;
 use rusqlite::params;
 use serde_json::{json, Value};
 use std::sync::{

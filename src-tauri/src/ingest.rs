@@ -725,7 +725,20 @@ pub async fn worker(db: Db, notify: impl Fn() + Send + 'static) {
             if let Err(e) = &result {
                 let duplicate = e.starts_with(DUPLICATE);
                 if let Ok(c) = db.conn() {
-                    let _=c.execute("UPDATE documents SET status=?4,stage=?5,error=?2,updated=?3 WHERE id=?1",params![id,e,now(),if duplicate{"duplicate"}else{"error"},if duplicate{"Duplicate"}else{"Needs checking"}]);
+                    let _ = c.execute(
+                        "UPDATE documents SET status=?4,stage=?5,error=?2,updated=?3 WHERE id=?1",
+                        params![
+                            id,
+                            e,
+                            now(),
+                            if duplicate { "duplicate" } else { "error" },
+                            if duplicate {
+                                "Duplicate"
+                            } else {
+                                "Needs checking"
+                            }
+                        ],
+                    );
                 }
             }
             let _ = db.log(
