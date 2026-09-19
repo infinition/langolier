@@ -614,6 +614,13 @@ npm run tauri build</pre>
 <p>Any GGUF path works too. Weights already pulled by Ollama are linked into the cache rather than downloaded again.</p>
 <p>Idle models are unloaded after a configurable pause, five minutes by default, so memory comes back without quitting the application.</p>
 <p>Prefer <code>qwen3:4b-instruct</code> over the bare <code>qwen3:4b</code>: the latter reasons out loud and lets its thinking leak into the answer.</p>
+<h3>Apple, on this Mac</h3>
+<p>On macOS 26 and newer, Langolier can ask the model the system already carries, through the framework Apple publishes for applications. The entry appears under <strong>Engines</strong> only on a Mac.</p>
+<p>Nothing is downloaded, nothing has to be started, no port is opened, and no disk space is used: the model belongs to the system and is shared with every other application that asks for it. On an M series Mac it writes around 25 tokens per second, with the first token after a second and a half.</p>
+<p>Two limits decide whether it suits you.</p>
+<p>Its context is 8192 tokens, and that budget covers the passages, the conversation so far and the answer together. Langolier trims the oldest turns to stay inside it, so a long thread keeps working but carries less history than it would on the embedded engine.</p>
+<p>It writes answers only. Apple exposes no embeddings, so the memory keeps running on the engine compiled into the application whatever you choose here.</p>
+<p>If the model cannot answer, the page says which of three things is in the way: Apple Intelligence is turned off in System Settings, the Mac cannot run it, or the model is still downloading.</p>
 <h3>Ollama, LM Studio and compatible servers</h3>
 <p>Point the address at a local server. Ollama on <code>http://127.0.0.1:11434</code>, LM Studio on its own port. The model has to be pulled on that side first.</p>
 <p>If you use Ollama for embeddings, it has to be running when Langolier searches, or hybrid search falls back to words only. The embedded engine has no such dependency, since it starts with the application.</p>

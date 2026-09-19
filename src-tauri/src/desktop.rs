@@ -511,7 +511,7 @@ async fn health(state: State<'_, AppState>) -> Res<Value> {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
     Ok(
-        json!({"engine_ok":result.is_ok(),"models":result.as_ref().ok(),"error":result.err(),"dependencies":deps,"whisper_model_exists":std::path::Path::new(&s.whisper_model).is_file(),"memory_total":sys.total_memory(),"memory_used":sys.used_memory(),"platform":std::env::consts::OS,"arch":std::env::consts::ARCH}),
+        json!({"engine_ok":result.is_ok(),"models":result.as_ref().ok(),"error":result.err(),"dependencies":deps,"whisper_model_exists":std::path::Path::new(&s.whisper_model).is_file(),"memory_total":sys.total_memory(),"memory_used":sys.used_memory(),"platform":std::env::consts::OS,"arch":std::env::consts::ARCH,"apple":apple_state()}),
     )
 }
 #[tauri::command]
@@ -648,6 +648,22 @@ fn embedding_ready(state: State<AppState>) -> Res<Value> {
         "ready": crate::engine::available(&s.embedding_model),
         "model": s.embedding_model,
     }))
+}
+/// What the interface needs to say about the model the system carries: whether
+/// it can answer, and in plain words why not when it cannot.
+fn apple_state() -> Value {
+    #[cfg(target_os = "macos")]
+    {
+        let ready = crate::apple::availability();
+        json!({
+            "supported": true,
+            "ready": ready == crate::apple::Availability::Ready,
+            "state": ready.as_str(),
+            "reason": ready.reason(),
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    json!({"supported": false, "ready": false, "state": "system", "reason": ""})
 }
 #[tauri::command]
 fn export_data(state: State<AppState>, path: String, kind: String) -> Res<Value> {

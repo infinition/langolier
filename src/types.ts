@@ -147,7 +147,8 @@ export type Provider =
   | "deepseek"
   | "anthropic"
   | "custom"
-  | "embedded";
+  | "embedded"
+  | "apple";
 export const PROVIDERS: {
   id: Provider;
   name: string;
@@ -202,6 +203,13 @@ export const PROVIDERS: {
     id: "embedded",
     name: "Embedded engine (llama.cpp, GGUF file)",
     endpoint: "embedded",
+    cloud: false,
+    models: [],
+  },
+  {
+    id: "apple",
+    name: "Apple, on this Mac",
+    endpoint: "apple",
     cloud: false,
     models: [],
   },
@@ -318,4 +326,10 @@ export interface Health {
   memory_used: number;
   platform: string;
   arch: string;
+  apple?: {
+    supported: boolean;
+    ready: boolean;
+    state: string;
+    reason: string;
+  };
 }

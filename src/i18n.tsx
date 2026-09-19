@@ -32,9 +32,18 @@ export function t(s: string, vars?: Record<string, string | number>): string {
   return out;
 }
 
-// Backend messages are English; translate the ones we know, pass the rest through
-export const message = (e: unknown) =>
-  t(e instanceof Error ? e.message : String(e));
+// Backend messages are English; translate the ones we know, pass the rest
+// through. Some carry a count, which would make the sentence impossible to
+// look up, so the numbers are lifted out and put back after the lookup.
+export function message(e: unknown): string {
+  const text = e instanceof Error ? e.message : String(e);
+  const counted = text.match(/^(.*?)(\d+)\/(\d+)(.*)$/s);
+  if (!counted) return t(text);
+  return t(`${counted[1]}{done}/{total}${counted[4]}`, {
+    done: counted[2],
+    total: counted[3],
+  });
+}
 
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
   lang: "en",

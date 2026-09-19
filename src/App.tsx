@@ -1,10 +1,5 @@
-import {
-  CopyButton,
-  Logo,
-  Modal,
-  SourceButton,
-} from "./components/Common";
-import { t, useLang } from "./i18n";
+import { CopyButton, Logo, Modal, SourceButton } from "./components/Common";
+import { message, t, useLang } from "./i18n";
 import ImportModal from "./components/ImportModal";
 import SourceEditor from "./components/SourceEditor";
 import LibraryPage from "./pages/Library";
@@ -56,14 +51,7 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  api,
-  initial,
-  desktop,
-  errorText,
-  bytes,
-  number,
-} from "./api";
+import { api, initial, desktop, errorText, bytes, number } from "./api";
 import type {
   Chunk,
   Doc,
@@ -100,7 +88,8 @@ function LangSwitch() {
             setLang(l);
             // Native menus live outside the interface's translations and
             // have to be told; failing is harmless, they stay as they were.
-            if (desktop) void api("set_interface_language", { lang: l }).catch(() => {});
+            if (desktop)
+              void api("set_interface_language", { lang: l }).catch(() => {});
           }}
         >
           {l.toUpperCase()}
@@ -230,11 +219,11 @@ export default function App() {
     void add(
       listen<string>("chat-token", (e) => setStream((t) => t + e.payload)),
     );
-    void add(listen<string>("chat-phase", (e) => setPhase(e.payload)));
+    void add(listen<string>("chat-phase", (e) => setPhase(t(e.payload))));
     void add(
       listen<{ sources: Source[]; warning?: string }>("chat-sources", (e) => {
         setSources(e.payload.sources);
-        if (e.payload.warning) setError(e.payload.warning);
+        if (e.payload.warning) setError(message(e.payload.warning));
       }),
     );
     void add(
@@ -433,37 +422,37 @@ export default function App() {
             <Plus size={16} /> {t("New conversation")}
           </button>
           <div className="history-list">
-          {data.conversations.length ? (
-            data.conversations.map((c) => (
-              <div
-                key={c.id}
-                className={`history-item${conversation === c.id ? " selected" : ""}`}
-              >
-                <button
-                  disabled={busy}
-                  className={conversation === c.id ? "selected" : ""}
-                  onClick={() => void selectConversation(c.id)}
+            {data.conversations.length ? (
+              data.conversations.map((c) => (
+                <div
+                  key={c.id}
+                  className={`history-item${conversation === c.id ? " selected" : ""}`}
                 >
-                  <span className="truncate">{c.title}</span>
-                </button>
-                <button
-                  className="history-delete"
-                  title={t("Delete this conversation")}
-                  aria-label={t('Delete "{title}"', { title: c.title })}
-                  disabled={busy}
-                  onClick={() => void removeConversation(c.id)}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))
-          ) : (
-            <p>
-              {t("Your next ideas")}
-              <br />
-              {t("start here.")}
-            </p>
-          )}
+                  <button
+                    disabled={busy}
+                    className={conversation === c.id ? "selected" : ""}
+                    onClick={() => void selectConversation(c.id)}
+                  >
+                    <span className="truncate">{c.title}</span>
+                  </button>
+                  <button
+                    className="history-delete"
+                    title={t("Delete this conversation")}
+                    aria-label={t('Delete "{title}"', { title: c.title })}
+                    disabled={busy}
+                    onClick={() => void removeConversation(c.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p>
+                {t("Your next ideas")}
+                <br />
+                {t("start here.")}
+              </p>
+            )}
           </div>
         </div>
         <div className="sidebar-bottom">

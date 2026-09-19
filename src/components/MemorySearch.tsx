@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { t } from "../i18n";
+import { message, t } from "../i18n";
 import {
   Search,
   LoaderCircle,
@@ -78,7 +78,7 @@ export default function MemorySearch({
         t("{n} occurrence(s) replaced across {chunks} passage(s).", {
           n: r.occurrences,
           chunks: r.chunks,
-        }) + (r.warning ? ` ${t(r.warning)}` : ""),
+        }) + (r.warning ? ` ${message(r.warning)}` : ""),
       );
       setResults(
         results.map((s) => ({ ...s, text: s.text.split(from).join(to) })),

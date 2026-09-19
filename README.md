@@ -76,6 +76,7 @@ The desktop app is Rust plus Tauri 2 with a React front end. The same binary als
 | Bridge        | Telegram long polling, no open port required                                                        |
 | Local API     | One JSON endpoint on loopback for Shortcuts, Siri and local agents, token required                 |
 | Menu bar      | Runs without its window, out of the Dock, still answering, background work paused                  |
+| Apple engine  | On macOS 26 and newer, answers from the model the system already carries, nothing to download       |
 
 ### Install
 
@@ -119,6 +120,12 @@ Langolier never hardcodes a model. Set the provider under **Engines**.
 | `qwen3:1.7b`        | 1.8 GB  | Very fast, may drift to English                                               |
 
 Avoid the bare `qwen3:4b` Thinking variant, it leaks its reasoning into answers. Any other GGUF works too: give its path instead of a tag.
+
+**Apple, on this Mac.** On macOS 26 and newer, Langolier can ask the model the system already carries, through the FoundationModels framework. Nothing to download, nothing to start, no port open, and no disk space: the model belongs to the system and is shared with every other application. Around 25 tokens per second on an M series Mac, with the first token after a second and a half.
+
+Two things to know before choosing it. Its context is 8192 tokens, shared between the passages, the conversation and the answer, so long threads get trimmed; the built-in engine goes further. And it writes answers only. Apple exposes no embeddings, so the memory keeps running on llama.cpp whatever you pick here.
+
+The entry appears under **Engines** only on a Mac. If the model cannot answer, the page says why: Apple Intelligence turned off, a Mac that cannot run it, or a model still downloading.
 
 **Ollama, optional.** If you already run Ollama, select it as the provider and point at `http://127.0.0.1:11434`; the same tags apply. Weights already pulled by Ollama are linked into the built-in engine's cache instead of being downloaded twice.
 
@@ -284,6 +291,7 @@ L'application de bureau est en Rust avec Tauri 2 et une interface React. Le mêm
 | Pont          | Telegram par interrogation longue, aucun port à ouvrir                                                    |
 | API locale    | Un point d'entrée JSON en boucle locale pour Raccourcis, Siri et les agents locaux, jeton exigé           |
 | Barre de menus | Tourne sans fenêtre, hors du Dock, toujours interrogeable, travaux de fond en veille                    |
+| Moteur Apple  | Sur macOS 26 et plus récent, répond depuis le modèle que le système porte déjà, rien à télécharger        |
 
 ### Installation
 
@@ -327,6 +335,12 @@ Langolier ne fige aucun modèle. Le fournisseur se règle dans **Moteurs**.
 | `qwen3:1.7b`        | 1,8 Go | Très rapide, peut glisser vers l'anglais                                  |
 
 Évitez le `qwen3:4b` nu, variante Thinking : il laisse fuir son raisonnement dans la réponse. N'importe quel autre GGUF fonctionne aussi : donnez son chemin à la place du tag.
+
+**Apple, sur ce Mac.** Sur macOS 26 et plus récent, Langolier peut interroger le modèle que le système porte déjà, via le framework FoundationModels. Rien à télécharger, rien à lancer, aucun port ouvert, et aucun espace disque : le modèle appartient au système et il est partagé avec toutes les autres applications. Environ 25 tokens par seconde sur un Mac M, avec le premier token au bout d'une seconde et demie.
+
+Deux choses à savoir avant de le choisir. Son contexte est de 8192 tokens, partagé entre les passages, la conversation et la réponse, donc les longs fils sont raccourcis ; le moteur embarqué va plus loin. Et il n'écrit que les réponses. Apple n'expose aucun embedding, donc la mémoire continue de tourner sur llama.cpp quel que soit votre choix ici.
+
+L'entrée n'apparaît dans **Moteurs** que sur un Mac. Si le modèle ne peut pas répondre, la page dit pourquoi : Apple Intelligence désactivé, Mac incapable de l'exécuter, ou modèle encore en téléchargement.
 
 **Ollama, en option.** Si vous avez déjà Ollama, choisissez-le comme fournisseur et pointez sur `http://127.0.0.1:11434` ; les mêmes tags s'appliquent. Les poids déjà récupérés par Ollama sont liés dans le cache du moteur embarqué au lieu d'être téléchargés deux fois.
 

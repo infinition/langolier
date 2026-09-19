@@ -206,23 +206,51 @@ export default function EngineSettings({
                 if (!p) return;
                 field("provider", p.id);
                 field("endpoint", p.endpoint);
-                if (p.models[0]) field("model", p.models[0]);
+                if (p.id === "apple") field("model", "system");
+                else if (p.models[0]) field("model", p.models[0]);
               }}
             >
-              {PROVIDERS.map((p) => (
+              {PROVIDERS.filter(
+                (p) => p.id !== "apple" || health?.apple?.supported,
+              ).map((p) => (
                 <option key={p.id} value={p.id}>
                   {t(p.name)}
                 </option>
               ))}
             </select>
           </label>
-          <label>
-            {t("Server address")}
-            <input
-              value={s.endpoint}
-              onChange={(e) => field("endpoint", e.target.value)}
-            />
-          </label>
+          {s.provider !== "apple" && (
+            <label>
+              {t("Server address")}
+              <input
+                value={s.endpoint}
+                onChange={(e) => field("endpoint", e.target.value)}
+              />
+            </label>
+          )}
+          {s.provider === "apple" && (
+            <>
+              <p className="field-help">
+                {t(
+                  "Langolier asks the model macOS already carries. Nothing to download, nothing to start, no port open. It answers about as fast as a small local model, and it is the only engine that costs no disk space.",
+                )}
+              </p>
+              <div className="setting-note">
+                <CircleAlert size={16} />
+                <p>
+                  {t(
+                    "Its context is 8192 tokens, shared between the passages, the conversation and the answer, so long threads are trimmed. It writes answers only: the memory keeps running on the embedded engine, because Apple offers no embeddings.",
+                  )}
+                </p>
+              </div>
+              {health?.apple && !health.apple.ready && (
+                <div className="setting-note">
+                  <CircleAlert size={16} />
+                  <p>{t(health.apple.reason)}</p>
+                </div>
+              )}
+            </>
+          )}
           {provider?.cloud && (
             <ApiKeyField
               value={s.api_key}
@@ -231,7 +259,7 @@ export default function EngineSettings({
               placeholder={s.provider === "anthropic" ? "sk-ant-…" : "sk-…"}
             />
           )}
-          <label>
+          <label hidden={s.provider === "apple"}>
             {s.provider === "embedded"
               ? t("Chat model (curated tag, or path to a GGUF file)")
               : t("Chat model")}
@@ -758,7 +786,10 @@ export default function EngineSettings({
                 setApiProbe("");
                 if (on && !s.local_api_token) {
                   try {
-                    field("local_api_token", await api<string>("new_local_token"));
+                    field(
+                      "local_api_token",
+                      await api<string>("new_local_token"),
+                    );
                   } catch (err) {
                     onError(err);
                     return;
@@ -819,8 +850,13 @@ export default function EngineSettings({
                 <Button
                   onClick={async () => {
                     try {
-                      field("local_api_token", await api<string>("new_local_token"));
-                      setApiProbe(t("New token. Save, then update your shortcut."));
+                      field(
+                        "local_api_token",
+                        await api<string>("new_local_token"),
+                      );
+                      setApiProbe(
+                        t("New token. Save, then update your shortcut."),
+                      );
                     } catch (e) {
                       onError(e);
                     }
@@ -832,15 +868,14 @@ export default function EngineSettings({
               <p className="field-help">
                 POST http://127.0.0.1:{s.local_api_port}/api/ask
                 <br />
-                {'{ "question": "…" }'} → {'{ "content": "…", "sources": [ … ] }'}
+                {'{ "question": "…" }'} →{" "}
+                {'{ "content": "…", "sources": [ … ] }'}
               </p>
               <div className="button-row">
                 <Button
                   onClick={() =>
                     void navigator.clipboard
-                      .writeText(
-                        `http://127.0.0.1:${s.local_api_port}/api/ask`,
-                      )
+                      .writeText(`http://127.0.0.1:${s.local_api_port}/api/ask`)
                       .then(() => setApiProbe(t("Address copied.")))
                       .catch(onError)
                   }

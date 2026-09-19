@@ -657,6 +657,11 @@ html[lang="fr"] .card .tag[data-lang="fr"] { display: inline-block; }
             <td data-lang="en">One JSON endpoint on loopback, for Shortcuts, Siri and local agents</td>
             <td data-lang="fr">Un point d'entrée JSON en boucle locale, pour Raccourcis, Siri et les agents locaux</td>
           </tr>
+          <tr>
+            <td data-lang="en">Apple engine</td><td data-lang="fr">Moteur Apple</td>
+            <td data-lang="en">On macOS 26 and newer, answers from the model the system already carries, nothing to download</td>
+            <td data-lang="fr">Sur macOS 26 et plus récent, répond depuis le modèle que le système porte déjà, rien à télécharger</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -768,6 +773,13 @@ npm run tauri build</pre>
         <h3 data-lang="fr">Des dossiers qui se remplissent seuls</h3>
         <p data-lang="en">Point Langolier at a folder, local or on a mounted NAS. It is scanned on a timer you choose, and anything supported that lands there enters the memory on its own. Sync leaves the files where they are, hoover moves them in.</p>
         <p data-lang="fr">Désignez un dossier à Langolier, en local ou sur un NAS monté. Il est scruté à l'intervalle que vous choisissez, et tout fichier pris en charge qui y atterrit entre dans la mémoire tout seul. Le mode sync laisse les fichiers en place, le mode aspirateur les déplace.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Apple</span>
+        <h3 data-lang="en">The model your Mac already has</h3>
+        <h3 data-lang="fr">Le modèle que votre Mac a déjà</h3>
+        <p data-lang="en">On macOS 26 and newer, pick <b>Apple, on this Mac</b> under Engines. Nothing to download, nothing to start, no port open, no disk space: the model belongs to the system. Its context is 8192 tokens, shared between the passages, the conversation and the answer, so long threads get trimmed. It writes answers only, the memory keeps running on the engine built into the application.</p>
+        <p data-lang="fr">Sur macOS 26 et plus récent, choisissez <b>Apple, sur ce Mac</b> dans Moteurs. Rien à télécharger, rien à lancer, aucun port ouvert, aucun espace disque : le modèle appartient au système. Son contexte est de 8192 tokens, partagé entre les passages, la conversation et la réponse, donc les longs fils sont raccourcis. Il n'écrit que les réponses, la mémoire continue de tourner sur le moteur intégré à l'application.</p>
       </div>
       <div class="card">
         <span class="tag">Telegram</span>

@@ -8,7 +8,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 /// Chat providers.
-pub const PROVIDERS: [&str; 7] = [
+pub const PROVIDERS: [&str; 8] = [
     "ollama",
     "openai",
     "openai_cloud",
@@ -16,9 +16,13 @@ pub const PROVIDERS: [&str; 7] = [
     "anthropic",
     "custom",
     "embedded",
+    // Refused at save time on the systems that have no such model.
+    "apple",
 ];
 /// Address marker for embeddings computed by the embedded engine.
 pub const EMBEDDED: &str = "embedded";
+/// The model the system already carries, on Macs recent enough to have one.
+pub const APPLE: &str = "apple";
 /// Supported embedding models.
 pub struct EmbedModel {
     pub tag: &'static str,
@@ -103,6 +107,18 @@ pub fn remote_endpoint(raw: &str) -> Res<String> {
 }
 /// Chat engine address, validated per provider.
 pub fn chat_endpoint(s: &Settings) -> Res<String> {
+    #[cfg(target_os = "macos")]
+    if s.provider == APPLE {
+        let ready = crate::apple::availability();
+        if ready != crate::apple::Availability::Ready {
+            return Err(ready.reason().into());
+        }
+        return Ok(APPLE.into());
+    }
+    #[cfg(not(target_os = "macos"))]
+    if s.provider == APPLE {
+        return Err("Apple's on-device model only exists on macOS.".into());
+    }
     if s.provider == EMBEDDED {
         if !crate::engine::available(&s.model) {
             return Err(format!("GGUF model not found: {}", s.model));
@@ -167,6 +183,15 @@ pub async fn embeddings(s: &Settings, texts: &[String]) -> Res<Vec<Vec<f32>>> {
     Ok(vectors)
 }
 pub async fn models(s: &Settings) -> Res<Value> {
+    #[cfg(target_os = "macos")]
+    if s.provider == APPLE {
+        let ready = crate::apple::availability();
+        if ready != crate::apple::Availability::Ready {
+            return Err(ready.reason().into());
+        }
+        // One model, carried by the system: nothing to weigh, nothing to ask.
+        return Ok(json!([{"name": "system", "size": 0}]));
+    }
     if s.provider == EMBEDDED {
         let path = crate::engine::resolve(&s.model)?;
         let size = std::fs::metadata(&path).map(|m| m.len()).map_err(|_| {
@@ -249,6 +274,26 @@ fn anthropic_messages(messages: &[Value]) -> (String, Vec<Value>) {
     }
     (system.join("\n\n"), turns)
 }
+/// Writes an exchange out as plain text, for an interface that takes one
+/// prompt rather than a list of turns.
+#[cfg(target_os = "macos")]
+fn flatten_turns(turns: &[Value]) -> String {
+    if let [only] = turns {
+        return only["content"].as_str().unwrap_or("").to_string();
+    }
+    turns
+        .iter()
+        .map(|m| {
+            let who = if m["role"] == "assistant" {
+                "Assistant"
+            } else {
+                "User"
+            };
+            format!("{who}: {}", m["content"].as_str().unwrap_or(""))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
 pub async fn generate(
     s: &Settings,
     messages: Vec<Value>,
@@ -257,6 +302,43 @@ pub async fn generate(
 ) -> Res<Generation> {
     let base = chat_endpoint(s)?;
     let provider = s.provider.as_str();
+    #[cfg(target_os = "macos")]
+    if provider == APPLE {
+        let start = Instant::now();
+        // The framework takes the brief once and the exchange as one prompt,
+        // so the conversation is written out rather than handed over as turns.
+        let (instructions, turns) = anthropic_messages(&messages);
+        let prompt = flatten_turns(&turns);
+        let first = std::sync::Mutex::new(None::<u64>);
+        let out = crate::apple::answer(
+            instructions,
+            prompt,
+            s.temperature.into(),
+            s.max_tokens.max(256) as u32,
+            cancel,
+            |piece| {
+                first
+                    .lock()
+                    .unwrap()
+                    .get_or_insert(start.elapsed().as_millis() as u64);
+                on_token(piece)
+            },
+        )
+        .await?;
+        if out.text.trim().is_empty() {
+            return Err("The model returned an empty answer.".into());
+        }
+        // Apple reports no token count, so it is estimated the way the rest of
+        // the application estimates it, about four characters each.
+        let tokens = (out.text.chars().count() / 4) as u64;
+        let secs = start.elapsed().as_secs_f64();
+        return Ok(Generation {
+            text: out.text,
+            tokens,
+            tps: (secs > 0.0).then(|| tokens as f64 / secs),
+            first_token_ms: out.first_token_ms.or(*first.lock().unwrap()),
+        });
+    }
     if provider == EMBEDDED {
         let start = Instant::now();
         let chat: Vec<(String, String)> = messages
@@ -630,6 +712,14 @@ pub async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Settings are refused when the provider is not in this list, so an
+    /// engine that exists everywhere else but here cannot be saved.
+    #[test]
+    fn every_engine_can_be_saved() {
+        for named in [EMBEDDED, APPLE, "ollama", "deepseek"] {
+            assert!(PROVIDERS.contains(&named), "{named} is missing");
+        }
+    }
     #[test]
     fn endpoints_by_provider() {
         assert!(local_endpoint("http://127.0.0.1:11434/").is_ok());

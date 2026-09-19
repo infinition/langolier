@@ -1,6 +1,6 @@
 [package]
 name = "langolier"
-version = "0.5.1"
+version = "0.6.0"
 description = "Local-first knowledge studio"
 edition = "2021"
 [lib]

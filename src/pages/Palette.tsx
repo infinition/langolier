@@ -64,7 +64,7 @@ export default function Palette() {
         patchLast((t) => ({ ...t, answer: t.answer + e.payload })),
       ),
     );
-    add(listen<string>("chat-phase", (e) => setPhase(e.payload)));
+    add(listen<string>("chat-phase", (e) => setPhase(t(e.payload))));
     add(
       listen<{ sources: Source[] }>("chat-sources", (e) =>
         patchLast((t) => ({ ...t, sources: e.payload.sources })),

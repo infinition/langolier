@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { t } from "../i18n";
+import { message, t } from "../i18n";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -146,7 +146,7 @@ export default function SourceEditor({
             : "") +
           (r.cancelled ? t(" (interrupted)") : "") +
           "." +
-          (r.warning ? ` ${t(r.warning)}` : ""),
+          (r.warning ? ` ${message(r.warning)}` : ""),
       );
       await reload(chunks);
     } catch (e) {
@@ -218,7 +218,7 @@ export default function SourceEditor({
           t("{n} occurrence(s) replaced across {chunks} passage(s).", {
             n: r.occurrences,
             chunks: r.chunks,
-          }) + (r.warning ? ` ${t(r.warning)}` : ""),
+          }) + (r.warning ? ` ${message(r.warning)}` : ""),
         );
         setCount(null);
         await reload(

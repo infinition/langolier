@@ -986,4 +986,24 @@ export const FR: Record<string, string> = {
     "Ajoutez une source, ou précisez la question.",
   "Nothing in your sources supports an answer. Add a source, narrow the question, or switch to Free conversation.":
     "Rien dans vos sources ne permet de répondre. Ajoutez une source, précisez la question, ou passez en Conversation libre.",
+  "Apple, on this Mac": "Apple, sur ce Mac",
+  "Langolier asks the model macOS already carries. Nothing to download, nothing to start, no port open. It answers about as fast as a small local model, and it is the only engine that costs no disk space.":
+    "Langolier interroge le mod\u00e8le que macOS porte d\u00e9j\u00e0. Rien \u00e0 t\u00e9l\u00e9charger, rien \u00e0 lancer, aucun port ouvert. Il r\u00e9pond \u00e0 peu pr\u00e8s aussi vite qu'un petit mod\u00e8le local, et c'est le seul moteur qui ne co\u00fbte aucun espace disque.",
+  "Its context is 8192 tokens, shared between the passages, the conversation and the answer, so long threads are trimmed. It writes answers only: the memory keeps running on the embedded engine, because Apple offers no embeddings.":
+    "Son contexte est de 8192 tokens, partag\u00e9 entre les passages, la conversation et la r\u00e9ponse, donc les longs fils sont raccourcis. Il n'\u00e9crit que les r\u00e9ponses : la m\u00e9moire continue de tourner sur le moteur int\u00e9gr\u00e9, parce qu'Apple ne propose aucun embedding.",
+  "This Mac cannot run Apple's on-device model.":
+    "Ce Mac ne peut pas ex\u00e9cuter le mod\u00e8le embarqu\u00e9 d'Apple.",
+  "Apple Intelligence is turned off. Turn it on in System Settings, then try again.":
+    "Apple Intelligence est d\u00e9sactiv\u00e9. Activez-le dans R\u00e9glages Syst\u00e8me, puis r\u00e9essayez.",
+  "Apple is still downloading its model. Try again in a few minutes.":
+    "Apple t\u00e9l\u00e9charge encore son mod\u00e8le. R\u00e9essayez dans quelques minutes.",
+  "Apple's on-device model needs macOS 26 or newer.":
+    "Le mod\u00e8le embarqu\u00e9 d'Apple demande macOS 26 ou plus r\u00e9cent.",
+  "Apple's on-device model is unavailable.":
+    "Le mod\u00e8le embarqu\u00e9 d'Apple est indisponible.",
+  "Apple's on-device model only exists on macOS.":
+    "Le mod\u00e8le embarqu\u00e9 d'Apple n'existe que sur macOS.",
+  "The model did not answer": "Le mod\u00e8le n'a pas r\u00e9pondu",
+  "Partial semantic index: {done}/{total} compatible passages. Reindex the remaining sources.":
+    "Index s\u00e9mantique partiel : {done}/{total} passages compatibles. R\u00e9indexez les sources restantes.",
 };

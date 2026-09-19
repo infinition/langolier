@@ -23,7 +23,10 @@ jobs:
             artifact: linux-x64
             args: --bundles deb,rpm,appimage
             binary: src-tauri/target/release/langolier
-          - os: macos-15
+          # macos-26 carries the SDK that holds FoundationModels; on an older
+          # image the build still succeeds but drops the Apple engine, which
+          # the check below refuses to ship silently.
+          - os: macos-26
             artifact: macos-universal
             args: --target universal-apple-darwin --bundles app,dmg
             binary: src-tauri/target/universal-apple-darwin/release/langolier
@@ -74,6 +77,20 @@ jobs:
       # Tauri embeds the frontend; a bare cargo build can retain the dev URL.
       - name: Build production application and packages
         run: npm run tauri build -- ${{ matrix.args }}
+      # The bridge to the model macOS carries is compiled only when the SDK
+      # holds the framework, so a runner without it would quietly produce a
+      # build missing the engine. Both slices of the universal binary carry it.
+      - name: Apple engine compiled in
+        if: runner.os == 'macOS'
+        run: |
+          set -e
+          for arch in arm64 x86_64; do
+            if ! otool -arch "$arch" -L "${{ matrix.binary }}" | grep -q FoundationModels; then
+              echo "Apple engine missing from the $arch slice"
+              exit 1
+            fi
+          done
+          echo "Apple engine present in both slices"
       - name: Chatbot launchers
         shell: bash
         run: node scripts/make-runners.mjs "${{ matrix.binary }}" "release-assets/chatbot-runners-${{ matrix.artifact }}" "Chatbot"
