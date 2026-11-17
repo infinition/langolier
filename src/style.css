@@ -2926,7 +2926,9 @@ html.palette-mode #root {
 .palette-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  /* The creature drifts towards the pointer, up to 7px each side, so the gap
+     leaves room for that movement instead of letting it touch the text. */
+  gap: 26px;
   padding: 10px 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transform: translateY(-14px) scale(0.97);
@@ -3904,6 +3906,8 @@ mark.current {
   border: 1px solid var(--line);
   border-radius: 7px;
   opacity: 0;
+  /* Invisible, so it must not catch clicks meant for the bubble underneath. */
+  pointer-events: none;
   transform: translateY(-2px);
   transition:
     opacity 0.18s,
@@ -3924,6 +3928,7 @@ mark.current {
 .copy-btn.done,
 .copy-btn.failed {
   opacity: 1;
+  pointer-events: auto;
   transform: none;
   transition-delay: 1s;
 }
@@ -3953,11 +3958,16 @@ mark.current {
     transform: scale(1);
   }
 }
+/* Sits over the top edge of the bubble, clear of the first line of text: the
+   chip is opaque and casts its own shadow, so it reads as floating above the
+   glass instead of blending into the answer. */
 .palette-bubble .copy-btn {
-  top: 8px;
-  right: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.12);
+  top: -13px;
+  right: 10px;
+  padding: 4px 9px;
+  background: rgba(30, 30, 34, 0.94);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
 .palette-hint-line {
