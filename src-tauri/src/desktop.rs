@@ -848,6 +848,14 @@ pub fn run() {
             ) {
                 eprintln!("Tray: {e}");
             }
+            // Started from the login item with no window: the menu bar is the
+            // only entry point, so the app steps out of the Dock until the
+            // window is opened, the same way closing it does later.
+            if hidden {
+                crate::db::BACKGROUND.store(true, Ordering::SeqCst);
+                #[cfg(target_os = "macos")]
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
             if let Err(e) = apply_autostart(app.handle(), s.launch_at_login) {
                 eprintln!("Launch at login: {e}");
             }
